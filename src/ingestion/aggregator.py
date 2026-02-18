@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from src.ingestion.tier1_core import FREDClient
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class MarketSnapshot:
     """Complete market snapshot aggregating all data sources."""
 
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     macro: dict[str, Any] = field(default_factory=dict)
     equities: dict[str, Any] = field(default_factory=dict)
     fixed_income: dict[str, Any] = field(default_factory=dict)
@@ -163,7 +163,7 @@ class DataAggregator:
             return_exceptions=True,
         )
 
-        snapshot = {"timestamp": datetime.utcnow().isoformat()}
+        snapshot = {"timestamp": datetime.now(UTC).isoformat()}
 
         for key, result in zip(tasks.keys(), results):
             if isinstance(result, Exception):

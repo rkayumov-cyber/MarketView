@@ -1,7 +1,7 @@
 """Market regime detection and classification."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from src.config.constants import MarketRegime
@@ -32,7 +32,7 @@ class MarketRegimeResult:
     description: str
     indicators: RegimeIndicators
     signals: list[str]
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_dict(self) -> dict[str, Any]:
         return {

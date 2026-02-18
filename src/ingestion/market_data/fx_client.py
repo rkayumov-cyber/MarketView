@@ -2,7 +2,7 @@
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import pandas as pd
@@ -25,7 +25,7 @@ class FXData:
     day_low: float
     fifty_two_week_high: float | None = None
     fifty_two_week_low: float | None = None
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -50,7 +50,7 @@ class DXYData:
     change_percent: float
     day_high: float
     day_low: float
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -238,5 +238,5 @@ class FXClient(DataSource[dict[str, FXData]]):
             "dxy": dxy.to_dict() if dxy else None,
             "pairs": {k: v.to_dict() for k, v in all_pairs.items()},
             "usd_strength_index": avg_usd_strength,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }

@@ -1,7 +1,7 @@
 """Technical analysis engine for market data."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import numpy as np
@@ -116,7 +116,7 @@ class TechnicalAnalysis:
     overall_signal: str  # "bullish", "bearish", "neutral"
     signal_strength: float  # 0-1
     signals: list[str]
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_dict(self) -> dict[str, Any]:
         return {

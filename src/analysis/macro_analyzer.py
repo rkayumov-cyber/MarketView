@@ -1,7 +1,7 @@
 """Macro economic analysis for different regions."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from src.config.constants import Region
@@ -106,7 +106,7 @@ class RegionalAnalysis:
     overall_assessment: str
     key_risks: list[str]
     key_opportunities: list[str]
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -131,7 +131,7 @@ class MacroAnalysis:
     asia: RegionalAnalysis | None
     global_outlook: str
     cross_regional_themes: list[str]
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_dict(self) -> dict[str, Any]:
         return {

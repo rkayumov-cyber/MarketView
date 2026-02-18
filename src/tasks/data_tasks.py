@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 
 from celery import shared_task
 
@@ -79,7 +79,7 @@ def clear_old_cache() -> dict:
         return {
             "status": "completed",
             "entries_cleared": cleared,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
     except Exception as e:
@@ -103,7 +103,7 @@ def health_check_sources() -> dict:
         return {
             "status": "healthy" if all_healthy else "degraded",
             "sources": health,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
     except Exception as e:

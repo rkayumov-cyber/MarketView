@@ -1,6 +1,6 @@
 """Data API endpoints."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
@@ -50,7 +50,7 @@ async def get_inflation_data() -> dict[str, Any]:
 
     return {
         "category": "inflation",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "data": {k: v.to_dict() for k, v in data.items()},
     }
 
@@ -63,7 +63,7 @@ async def get_rates_data() -> dict[str, Any]:
 
     return {
         "category": "rates",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "data": {k: v.to_dict() for k, v in data.items()},
     }
 
@@ -76,7 +76,7 @@ async def get_labor_data() -> dict[str, Any]:
 
     return {
         "category": "labor",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "data": {k: v.to_dict() for k, v in data.items()},
     }
 
@@ -89,7 +89,7 @@ async def get_growth_data() -> dict[str, Any]:
 
     return {
         "category": "growth",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "data": {k: v.to_dict() for k, v in data.items()},
     }
 
@@ -102,7 +102,7 @@ async def get_credit_data() -> dict[str, Any]:
 
     return {
         "category": "credit",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "data": {k: v.to_dict() for k, v in data.items()},
     }
 
@@ -115,6 +115,6 @@ async def get_yield_curve() -> dict[str, Any]:
 
     return {
         "category": "yield_curve",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "data": curve,
     }

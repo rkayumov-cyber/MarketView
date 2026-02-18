@@ -2,7 +2,7 @@
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import pandas as pd
@@ -27,7 +27,7 @@ class CommodityData:
     volume: int
     fifty_two_week_high: float | None = None
     fifty_two_week_low: float | None = None
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -202,5 +202,5 @@ class CommodityClient(DataSource[dict[str, CommodityData]]):
             "energy": {k: v.to_dict() for k, v in energy.items()},
             "agriculture": {k: v.to_dict() for k, v in agriculture.items()},
             "industrial": {k: v.to_dict() for k, v in industrial.items()},
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }

@@ -1,6 +1,6 @@
 """SQLAlchemy database models."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import Column, String, Integer, DateTime, Text, JSON, Float, Index
@@ -21,8 +21,8 @@ class Report(Base):
     format = Column(String(32), nullable=False, default="markdown")
     content = Column(Text, nullable=True)
     content_json = Column(JSON, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
     # Report metadata
     regime = Column(String(64), nullable=True)
@@ -52,7 +52,7 @@ class MarketSnapshot(Base):
     __tablename__ = "market_snapshots"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    timestamp = Column(DateTime, default=lambda: datetime.now(UTC), nullable=False, index=True)
 
     # Equity indices
     spx = Column(Float, nullable=True)
@@ -109,7 +109,7 @@ class RegimeHistory(Base):
     __tablename__ = "regime_history"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    timestamp = Column(DateTime, default=lambda: datetime.now(UTC), nullable=False, index=True)
     regime = Column(String(64), nullable=False)
     confidence = Column(Float, nullable=False)
     signals = Column(JSON, nullable=True)

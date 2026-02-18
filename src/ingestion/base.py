@@ -4,7 +4,7 @@ import hashlib
 import json
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Generic, TypeVar
 
 import redis.asyncio as redis
@@ -190,7 +190,7 @@ class DataPoint:
         metadata: dict[str, Any] | None = None,
     ) -> None:
         self.value = value
-        self.timestamp = timestamp or datetime.utcnow()
+        self.timestamp = timestamp or datetime.now(UTC)
         self.metadata = metadata or {}
 
     def to_dict(self) -> dict[str, Any]:

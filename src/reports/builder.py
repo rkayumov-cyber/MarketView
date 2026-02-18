@@ -2,7 +2,7 @@
 
 import asyncio
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from src.reports.models import Report, ReportConfig, ReportLevel
 from src.reports.sections import (
@@ -39,7 +39,7 @@ class ReportBuilder:
         level = config.level
 
         # Generate report ID
-        report_id = f"RPT-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:6]}"
+        report_id = f"RPT-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:6]}"
 
         # Build sections concurrently where possible
         pulse_task = self.pulse_builder.build(level)
@@ -95,14 +95,14 @@ class ReportBuilder:
             technicals=technicals,
             forward=forward,
             metadata={
-                "generated_at": datetime.utcnow().isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "version": "1.0",
             },
         )
 
     def _generate_title(self, level: ReportLevel, pulse) -> str:
         """Generate report title based on content."""
-        date_str = datetime.utcnow().strftime("%B %d, %Y")
+        date_str = datetime.now(UTC).strftime("%B %d, %Y")
         regime = pulse.regime.regime.replace("_", " ").title()
 
         level_names = {

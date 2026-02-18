@@ -2,7 +2,7 @@
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pandas as pd
@@ -32,7 +32,7 @@ class EquityData:
     market_cap: float | None = None
     pe_ratio: float | None = None
     dividend_yield: float | None = None
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -65,7 +65,7 @@ class MarketBreadth:
     advance_decline_ratio: float
     new_highs: int
     new_lows: int
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -232,7 +232,7 @@ class EquityClient(DataSource[dict[str, EquityData]]):
                 "unchanged": unchanged,
                 "ratio": advancing / declining if declining > 0 else float("inf"),
             },
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
     async def get_us_indices(self) -> dict[str, EquityData]:

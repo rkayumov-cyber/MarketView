@@ -1,6 +1,6 @@
 """Repository pattern for database access."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select, desc
@@ -144,7 +144,7 @@ class SnapshotRepository:
     ) -> list[MarketSnapshot]:
         """Get snapshots within a date range."""
         if end is None:
-            end = datetime.utcnow()
+            end = datetime.now(UTC)
 
         result = await self.session.execute(
             select(MarketSnapshot)
@@ -156,7 +156,7 @@ class SnapshotRepository:
 
     async def get_daily_snapshots(self, days: int = 30) -> list[MarketSnapshot]:
         """Get one snapshot per day for the last N days."""
-        start = datetime.utcnow() - timedelta(days=days)
+        start = datetime.now(UTC) - timedelta(days=days)
         return await self.get_range(start)
 
 
@@ -184,7 +184,7 @@ class RegimeRepository:
 
     async def get_history(self, days: int = 90) -> list[RegimeHistory]:
         """Get regime history for the last N days."""
-        start = datetime.utcnow() - timedelta(days=days)
+        start = datetime.now(UTC) - timedelta(days=days)
 
         result = await self.session.execute(
             select(RegimeHistory)

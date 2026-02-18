@@ -1,6 +1,6 @@
 """Pydantic models for report structures."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -246,7 +246,7 @@ class Report(BaseModel):
     report_id: str
     title: str
     level: ReportLevel
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     config: ReportConfig
 
     pulse: PulseSection

@@ -1,7 +1,7 @@
 """FRED (Federal Reserve Economic Data) API client."""
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pandas as pd
@@ -29,7 +29,7 @@ class FREDData:
         self.data = data
         self.units = units
         self.frequency = frequency
-        self.last_updated = last_updated or datetime.utcnow()
+        self.last_updated = last_updated or datetime.now(UTC)
 
     @property
     def latest_value(self) -> float | None:
@@ -162,7 +162,7 @@ class FREDClient(DataSource[dict[str, FREDData]]):
                     data=data,
                     units=info.get("units", ""),
                     frequency=info.get("frequency", ""),
-                    last_updated=datetime.utcnow(),
+                    last_updated=datetime.now(UTC),
                 )
             except Exception as e:
                 self.logger.error(f"Error fetching {series_name}: {e}")

@@ -2,7 +2,7 @@
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from pycoingecko import CoinGeckoAPI
@@ -34,7 +34,7 @@ class CryptoData:
     ath: float | None = None
     ath_change_percentage: float | None = None
     atl: float | None = None
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -70,7 +70,7 @@ class CryptoMarketOverview:
     eth_dominance: float
     market_cap_change_24h: float
     active_cryptocurrencies: int
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -201,7 +201,7 @@ class CryptoClient(DataSource[dict[str, CryptoData]]):
 
                 prices = []
                 for timestamp, price in data["prices"]:
-                    dt = datetime.utcfromtimestamp(timestamp / 1000)
+                    dt = datetime.fromtimestamp(timestamp / 1000, tz=UTC)
                     prices.append((dt, price))
 
                 return prices
@@ -264,5 +264,5 @@ class CryptoClient(DataSource[dict[str, CryptoData]]):
                 "ath_distance": round(ath_score, 1),
                 "dominance": round(dominance_score, 1),
             },
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }

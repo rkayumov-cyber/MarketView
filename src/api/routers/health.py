@@ -1,6 +1,6 @@
 """Health check endpoints."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter
@@ -17,7 +17,7 @@ async def health_check() -> dict[str, Any]:
     """Basic health check."""
     return {
         "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "version": "1.0.0",
         "environment": settings.app_env,
     }
@@ -54,7 +54,7 @@ async def detailed_health_check() -> dict[str, Any]:
 
     return {
         "status": "healthy" if all_healthy else "degraded",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "services": services,
     }
 

@@ -4,7 +4,7 @@ import asyncio
 import re
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import praw
@@ -52,7 +52,7 @@ class SubredditSentiment:
     top_tickers: list[tuple[str, int]]
     sentiment_score: float  # -1 to 1
     bullish_ratio: float
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -172,7 +172,7 @@ class RedditClient(DataSource[dict[str, SubredditSentiment]]):
                         subreddit=subreddit_name,
                         score=submission.score,
                         num_comments=submission.num_comments,
-                        created_utc=datetime.utcfromtimestamp(submission.created_utc),
+                        created_utc=datetime.fromtimestamp(submission.created_utc, tz=UTC),
                         url=f"https://reddit.com{submission.permalink}",
                         is_self=submission.is_self,
                         selftext=submission.selftext[:500] if submission.selftext else "",
@@ -288,5 +288,5 @@ class RedditClient(DataSource[dict[str, SubredditSentiment]]):
             "total_posts_analyzed": total_posts,
             "subreddit_count": len(sentiment_data),
             "trending_tickers": trending,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }

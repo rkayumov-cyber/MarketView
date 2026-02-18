@@ -1,6 +1,6 @@
 """Markdown report formatter."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from src.reports.models import Report, ReportLevel
 
@@ -397,6 +397,6 @@ class MarkdownFormatter:
             "*This report is generated automatically by MarketView and is for informational purposes only. "
             "It does not constitute investment advice.*",
             "",
-            f"*Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}*",
+            f"*Generated: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}*",
         ]
         return "\n".join(lines)

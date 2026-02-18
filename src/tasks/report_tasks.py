@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 
 from celery import shared_task
 
@@ -105,7 +105,7 @@ def schedule_daily_report(level: int = 2) -> dict:
     """
     logger.info("Generating scheduled daily report")
 
-    timestamp = datetime.utcnow().strftime("%Y%m%d")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d")
     output_path = f"./reports/daily_alpha_brief_{timestamp}.md"
 
     # Trigger the report generation task
@@ -119,7 +119,7 @@ def schedule_daily_report(level: int = 2) -> dict:
 
     return {
         "task_id": result.id,
-        "scheduled_at": datetime.utcnow().isoformat(),
+        "scheduled_at": datetime.now(UTC).isoformat(),
         "output_path": output_path,
     }
 
