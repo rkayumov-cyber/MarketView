@@ -7,7 +7,7 @@ from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 
 from src.config.settings import settings
-from src.storage.models import Base, Report, MarketSnapshot, RegimeHistory
+from src.storage.models import Base, Report, MarketSnapshot, RegimeHistory, Document
 
 
 class Database:
@@ -25,12 +25,13 @@ class Database:
     async def connect(self) -> None:
         """Initialize database connection."""
         if self._engine is None:
-            self._engine = create_async_engine(
-                settings.database_url,
-                echo=settings.debug,
-                pool_size=5,
-                max_overflow=10,
-            )
+            kwargs: dict = {"echo": settings.debug}
+            if "sqlite" in settings.database_url:
+                kwargs["connect_args"] = {"check_same_thread": False}
+            else:
+                kwargs["pool_size"] = 5
+                kwargs["max_overflow"] = 10
+            self._engine = create_async_engine(settings.database_url, **kwargs)
             self._session_factory = async_sessionmaker(
                 self._engine,
                 class_=AsyncSession,
@@ -192,3 +193,56 @@ class RegimeRepository:
             .order_by(RegimeHistory.timestamp)
         )
         return list(result.scalars().all())
+
+
+class DocumentRepository:
+    """Repository for uploaded research document metadata."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def save(self, document: Document) -> Document:
+        """Save a document record."""
+        self.session.add(document)
+        await self.session.commit()
+        await self.session.refresh(document)
+        return document
+
+    async def get_by_id(self, document_id: str) -> Document | None:
+        """Get a document by its unique document_id."""
+        result = await self.session.execute(
+            select(Document).where(Document.document_id == document_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def list_all(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Document]:
+        """List documents ordered by upload date (newest first)."""
+        result = await self.session.execute(
+            select(Document)
+            .order_by(desc(Document.uploaded_at))
+            .limit(limit)
+            .offset(offset)
+        )
+        return list(result.scalars().all())
+
+    async def count(self) -> int:
+        """Count total documents."""
+        from sqlalchemy import func
+
+        result = await self.session.execute(
+            select(func.count(Document.id))
+        )
+        return result.scalar_one()
+
+    async def delete(self, document_id: str) -> bool:
+        """Delete a document by its document_id."""
+        doc = await self.get_by_id(document_id)
+        if doc:
+            await self.session.delete(doc)
+            await self.session.commit()
+            return True
+        return False

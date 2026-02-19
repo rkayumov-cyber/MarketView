@@ -24,6 +24,8 @@ class ReportRequest(BaseModel):
     include_correlations: bool = Field(default=False, description="Include correlation matrix")
     assets: list[str] | None = Field(default=None, description="Specific assets to analyze")
     title: str | None = Field(default=None, description="Custom report title")
+    llm_provider: str | None = Field(default=None, description="LLM provider for AI enhancement")
+    llm_model: str | None = Field(default=None, description="LLM model name")
 
 
 class ReportResponse(BaseModel):
@@ -55,6 +57,8 @@ async def generate_report(request: ReportRequest) -> ReportResponse:
             include_correlations=request.include_correlations,
             custom_assets=request.assets,
             title=request.title,
+            llm_provider=request.llm_provider,
+            llm_model=request.llm_model,
         )
 
         # Build report
@@ -135,6 +139,47 @@ async def generate_quick_report(
             status_code=500,
             detail=f"Quick report generation failed: {str(e)}",
         )
+
+
+@router.get("/llm-providers")
+async def get_llm_providers() -> dict[str, Any]:
+    """Return available LLM providers with availability status."""
+    from src.config.settings import settings
+    from src.llm.client import LLM_PROVIDER_INFO
+
+    providers = []
+    for name, info in LLM_PROVIDER_INFO.items():
+        available = False
+        if name == "openai":
+            available = settings.openai_api_key is not None
+        elif name == "gemini":
+            available = settings.gemini_api_key is not None
+        elif name == "anthropic":
+            available = settings.anthropic_api_key is not None
+        elif name == "ollama":
+            try:
+                import httpx
+
+                resp = httpx.get(
+                    f"{settings.ollama_base_url}/api/tags", timeout=2.0
+                )
+                available = resp.status_code == 200
+            except Exception:
+                available = False
+
+        providers.append(
+            {
+                "id": name,
+                "label": info["label"],
+                "type": info["type"],
+                "needs_key": info["needs_key"],
+                "models": info["models"],
+                "default_model": info["default_model"],
+                "available": available,
+            }
+        )
+
+    return {"providers": providers}
 
 
 @router.get("/{report_id}")

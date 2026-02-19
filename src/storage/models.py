@@ -103,6 +103,41 @@ class MarketSnapshot(Base):
         }
 
 
+class Document(Base):
+    """Uploaded research document metadata (vectors live in ChromaDB)."""
+
+    __tablename__ = "documents"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    document_id = Column(String(64), unique=True, nullable=False, index=True)
+    filename = Column(String(512), nullable=False)
+    title = Column(String(512), nullable=True)
+    source_type = Column(String(64), default="pdf")  # pdf, excel, url
+    page_count = Column(Integer, nullable=True)
+    chunk_count = Column(Integer, default=0)
+    file_size = Column(Integer, nullable=True)  # bytes
+    uploaded_at = Column(DateTime, default=lambda: datetime.now(UTC), nullable=False)
+    metadata_json = Column(JSON, nullable=True)
+
+    __table_args__ = (
+        Index("ix_documents_uploaded_at", "uploaded_at"),
+    )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "document_id": self.document_id,
+            "filename": self.filename,
+            "title": self.title,
+            "source_type": self.source_type,
+            "page_count": self.page_count,
+            "chunk_count": self.chunk_count,
+            "file_size": self.file_size,
+            "uploaded_at": self.uploaded_at.isoformat() if self.uploaded_at else None,
+            "metadata": self.metadata_json,
+        }
+
+
 class RegimeHistory(Base):
     """Historical market regime classifications."""
 

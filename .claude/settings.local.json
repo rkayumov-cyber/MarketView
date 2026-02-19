@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "WebSearch"
+      "WebSearch",
+      "Bash(git commit:*)",
+      "Bash(python:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

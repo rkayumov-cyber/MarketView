@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.config.settings import settings
 from src.ingestion.base import CacheManager
+from src.storage.repository import Database
 
 # Configure logging
 logging.basicConfig(
@@ -23,16 +24,50 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager."""
     # Startup
     logger.info("Starting MarketView API...")
+
+    # Redis cache (non-fatal)
     cache = CacheManager()
-    await cache.connect()
-    logger.info("Connected to Redis cache")
+    try:
+        await cache.connect()
+        logger.info("Connected to Redis cache")
+    except Exception:
+        logger.warning("Redis unavailable — caching disabled", exc_info=True)
+
+    # Database
+    db = Database()
+    try:
+        await db.connect()
+        await db.create_tables()
+        logger.info("Connected to database")
+    except Exception:
+        logger.warning("Database connection failed", exc_info=True)
+
+    # ChromaDB (non-fatal)
+    try:
+        from src.ingestion.tier3_research.vector_store import VectorStore
+        VectorStore.get_client()
+        logger.info("ChromaDB initialised")
+    except Exception:
+        logger.warning("ChromaDB init failed — RAG features unavailable", exc_info=True)
 
     yield
 
     # Shutdown
     logger.info("Shutting down MarketView API...")
-    await cache.disconnect()
-    logger.info("Disconnected from Redis cache")
+    try:
+        from src.ingestion.tier3_research.vector_store import VectorStore as _VS
+        _VS.shutdown()
+    except Exception:
+        pass
+    try:
+        await db.disconnect()
+    except Exception:
+        pass
+    try:
+        await cache.disconnect()
+    except Exception:
+        pass
+    logger.info("MarketView API shut down")
 
 
 app = FastAPI(
@@ -54,11 +89,13 @@ app.add_middleware(
 )
 
 # Import and include routers
-from src.api.routers import data, health, reports
+from src.api.routers import data, health, market, reports, sources
 
 app.include_router(health.router, tags=["Health"])
 app.include_router(data.router, prefix="/api/v1/data", tags=["Data"])
+app.include_router(market.router, prefix="/api/v1/data/market", tags=["Market Data"])
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reports"])
+app.include_router(sources.router, prefix="/api/v1/sources", tags=["Sources"])
 
 
 @app.get("/")

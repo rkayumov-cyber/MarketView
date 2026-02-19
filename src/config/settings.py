@@ -28,8 +28,8 @@ class Settings(BaseSettings):
     reddit_client_secret: SecretStr | None = None
     reddit_user_agent: str = "MarketView/1.0"
 
-    # Database
-    database_url: str = "postgresql+asyncpg://marketview:marketview@localhost:5432/marketview"
+    # Database (SQLite for dev, PostgreSQL for prod)
+    database_url: str = "sqlite+aiosqlite:///./marketview.db"
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
@@ -43,6 +43,21 @@ class Settings(BaseSettings):
     cache_ttl_reddit: int = 900  # 15 minutes
     cache_ttl_crypto: int = 300  # 5 minutes
     cache_ttl_equity: int = 900  # 15 minutes
+
+    # LLM (report enhancement)
+    anthropic_api_key: SecretStr | None = None
+    ollama_base_url: str = "http://localhost:11434"
+
+    # Tier 3 — Research / RAG
+    embedding_provider: Literal["local", "openai", "gemini"] = "local"
+    openai_api_key: SecretStr | None = None
+    gemini_api_key: SecretStr | None = None
+    chromadb_path: str = "./chroma_data"
+    embedding_model: str = "text-embedding-3-small"
+    local_embedding_model: str = "all-MiniLM-L6-v2"
+    gemini_embedding_model: str = "text-embedding-004"
+    chunk_size: int = 1000
+    chunk_overlap: int = 200
 
     # Rate Limits (requests per minute)
     rate_limit_fred: int = 120

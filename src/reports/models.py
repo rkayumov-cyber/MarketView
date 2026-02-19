@@ -34,6 +34,8 @@ class ReportConfig(BaseModel):
     include_correlations: bool = True
     custom_assets: list[str] | None = None
     title: str | None = None
+    llm_provider: str | None = None
+    llm_model: str | None = None
 
 
 class MarketRegimeInfo(BaseModel):
@@ -71,6 +73,31 @@ class PulseSection(BaseModel):
     divergences: list[DivergenceInfo] = Field(default_factory=list)
     big_narrative: str
     key_takeaways: list[str]
+
+
+class SubredditBreakdown(BaseModel):
+    """Per-subreddit sentiment breakdown."""
+
+    subreddit: str
+    sentiment_score: float
+    bullish_ratio: float
+    post_count: int
+    top_tickers: list[tuple[str, int]] = Field(default_factory=list)
+
+
+class SentimentSection(BaseModel):
+    """Dedicated sentiment analysis section."""
+
+    overall_score: float
+    overall_label: str  # "Bullish", "Bearish", "Neutral"
+    bullish_ratio: float
+    total_posts: int
+    subreddit_count: int
+    trending_tickers: list[tuple[str, int]] = Field(default_factory=list)
+    subreddit_breakdowns: list[SubredditBreakdown] = Field(default_factory=list)
+    narrative: str
+    contrarian_signals: list[str] = Field(default_factory=list)
+    source: str = "reddit"
 
 
 class RegionMacro(BaseModel):
@@ -250,6 +277,7 @@ class Report(BaseModel):
     config: ReportConfig
 
     pulse: PulseSection
+    sentiment: SentimentSection | None = None
     macro: MacroSection
     assets: AssetSection
     technicals: TechnicalsSection | None = None

@@ -4,23 +4,44 @@ from datetime import UTC, datetime
 
 from src.reports.models import Report, ReportLevel
 
+_ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII"]
+
+
+class _Counter:
+    """Auto-incrementing Roman numeral counter for section headings."""
+
+    def __init__(self) -> None:
+        self._n = 0
+
+    def __call__(self) -> str:
+        idx = self._n
+        self._n += 1
+        return _ROMAN[idx] if idx < len(_ROMAN) else str(idx + 1)
+
 
 class MarkdownFormatter:
     """Formats reports as Markdown."""
 
     def format(self, report: Report) -> str:
         """Format report as Markdown."""
+        # Dynamic section numbering
+        num = _Counter()
+
         sections = [
             self._format_header(report),
-            self._format_pulse(report),
-            self._format_macro(report),
-            self._format_assets(report),
+            self._format_pulse(report, num()),
         ]
 
-        if report.technicals:
-            sections.append(self._format_technicals(report))
+        if report.sentiment:
+            sections.append(self._format_sentiment(report, num()))
 
-        sections.append(self._format_forward(report))
+        sections.append(self._format_macro(report, num()))
+        sections.append(self._format_assets(report, num()))
+
+        if report.technicals:
+            sections.append(self._format_technicals(report, num()))
+
+        sections.append(self._format_forward(report, num()))
         sections.append(self._format_footer(report))
 
         return "\n\n".join(sections)
@@ -38,11 +59,11 @@ class MarkdownFormatter:
         ]
         return "\n".join(lines)
 
-    def _format_pulse(self, report: Report) -> str:
+    def _format_pulse(self, report: Report, num: str) -> str:
         """Format The Pulse section."""
         pulse = report.pulse
         lines = [
-            "## I. THE PULSE",
+            f"## {num}. THE PULSE",
             "",
             f"### Market Regime: {pulse.regime.regime.replace('_', ' ').title()}",
             f"*Confidence: {pulse.regime.confidence:.0%}*",
@@ -58,22 +79,9 @@ class MarkdownFormatter:
                 lines.append(f"- {signal}")
             lines.append("")
 
-        # Sentiment
-        if pulse.sentiment and report.level >= ReportLevel.STANDARD:
-            lines.extend([
-                "### Sentiment Analysis",
-                f"- Overall Sentiment Score: {pulse.sentiment.overall_score:.2f}",
-                f"- Bullish Ratio: {pulse.sentiment.bullish_ratio:.0%}",
-            ])
-
-            if pulse.sentiment.trending_tickers:
-                tickers = [f"${t[0]}" for t in pulse.sentiment.trending_tickers[:5]]
-                lines.append(f"- Trending: {', '.join(tickers)}")
-            lines.append("")
-
         # Divergences
         if pulse.divergences:
-            lines.append("### ⚠️ Divergences")
+            lines.append("### Divergences")
             for div in pulse.divergences:
                 lines.extend([
                     f"**{div.description}**",
@@ -96,11 +104,62 @@ class MarkdownFormatter:
 
         return "\n".join(lines)
 
-    def _format_macro(self, report: Report) -> str:
+    def _format_sentiment(self, report: Report, num: str) -> str:
+        """Format the Sentiment Analysis section."""
+        sent = report.sentiment
+        if not sent:
+            return ""
+
+        lines = [
+            f"## {num}. SENTIMENT ANALYSIS",
+            "",
+            f"**Overall: {sent.overall_label}** (score: {sent.overall_score:+.2f}, "
+            f"bullish ratio: {sent.bullish_ratio:.0%})",
+            f"*{sent.total_posts} posts analyzed across {sent.subreddit_count} subreddits "
+            f"({sent.source})*",
+            "",
+            sent.narrative,
+            "",
+        ]
+
+        # Trending tickers
+        if sent.trending_tickers:
+            lines.append("### Trending Tickers")
+            lines.append("")
+            lines.append("| Ticker | Mentions |")
+            lines.append("|--------|----------|")
+            for ticker, count in sent.trending_tickers[:10]:
+                lines.append(f"| ${ticker} | {count} |")
+            lines.append("")
+
+        # Subreddit breakdowns (L2+)
+        if sent.subreddit_breakdowns and report.level >= ReportLevel.STANDARD:
+            lines.append("### Subreddit Breakdown")
+            lines.append("")
+            lines.append("| Subreddit | Score | Bullish | Posts | Top Ticker |")
+            lines.append("|-----------|-------|---------|-------|------------|")
+            for b in sent.subreddit_breakdowns:
+                top = f"${b.top_tickers[0][0]}" if b.top_tickers else "-"
+                lines.append(
+                    f"| r/{b.subreddit} | {b.sentiment_score:+.2f} | "
+                    f"{b.bullish_ratio:.0%} | {b.post_count} | {top} |"
+                )
+            lines.append("")
+
+        # Contrarian signals
+        if sent.contrarian_signals:
+            lines.append("### Contrarian Signals")
+            for signal in sent.contrarian_signals:
+                lines.append(f"- {signal}")
+            lines.append("")
+
+        return "\n".join(lines)
+
+    def _format_macro(self, report: Report, num: str) -> str:
         """Format Macro Analysis section."""
         macro = report.macro
         lines = [
-            "## II. MACRO ANALYSIS",
+            f"## {num}. MACRO ANALYSIS",
             "",
         ]
 
@@ -176,11 +235,11 @@ class MarkdownFormatter:
 
         return "\n".join(lines)
 
-    def _format_assets(self, report: Report) -> str:
+    def _format_assets(self, report: Report, num: str) -> str:
         """Format Asset Class section."""
         assets = report.assets
         lines = [
-            "## III. ASSET CLASS DEEP DIVE",
+            f"## {num}. ASSET CLASS DEEP DIVE",
             "",
         ]
 
@@ -281,14 +340,14 @@ class MarkdownFormatter:
 
         return "\n".join(lines)
 
-    def _format_technicals(self, report: Report) -> str:
+    def _format_technicals(self, report: Report, num: str) -> str:
         """Format Technicals section."""
         if not report.technicals:
             return ""
 
         tech = report.technicals
         lines = [
-            "## IV. TECHNICALS & POSITIONING",
+            f"## {num}. TECHNICALS & POSITIONING",
             "",
         ]
 
@@ -345,11 +404,11 @@ class MarkdownFormatter:
 
         return "\n".join(lines)
 
-    def _format_forward(self, report: Report) -> str:
+    def _format_forward(self, report: Report, num: str) -> str:
         """Format Forward Watch section."""
         forward = report.forward
         lines = [
-            "## V. THE FORWARD WATCH",
+            f"## {num}. THE FORWARD WATCH",
             "",
             "### Lesson of the Day",
             f"*{forward.lesson_of_the_day}*",
