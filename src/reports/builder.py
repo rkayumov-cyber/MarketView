@@ -151,18 +151,22 @@ class ReportBuilder:
                     model=config.llm_model,
                 )
                 enhancer = SectionEnhancer(llm)
+                _cp = config.custom_prompt
                 enhance_tasks = [
                     enhancer.enhance_pulse(
                         pulse,
                         research_context=research_context.get("pulse"),
+                        custom_prompt=_cp,
                     ),
                     enhancer.enhance_macro(
                         macro,
                         research_context=research_context.get("macro"),
+                        custom_prompt=_cp,
                     ),
                     enhancer.enhance_forward(
                         forward,
                         research_context=research_context.get("forward"),
+                        custom_prompt=_cp,
                     ),
                 ]
                 if sentiment:
@@ -170,6 +174,7 @@ class ReportBuilder:
                         enhancer.enhance_sentiment(
                             sentiment,
                             research_context=research_context.get("sentiment"),
+                            custom_prompt=_cp,
                         )
                     )
                 enhanced = await asyncio.gather(

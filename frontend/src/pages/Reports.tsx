@@ -6,9 +6,13 @@ import {
   deleteReport,
   getLLMProviders,
   listDocuments,
+  listTemplates,
+  createTemplate,
+  deleteTemplate as apiDeleteTemplate,
   type ReportRequest,
   type LLMProvider,
   type DocumentMeta,
+  type PromptTemplate,
 } from "../api/client";
 import StatusBadge from "../components/StatusBadge";
 
@@ -167,10 +171,14 @@ export default function Reports() {
   const [documents, setDocuments] = useState<DocumentMeta[]>([]);
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
   const [docsLoaded, setDocsLoaded] = useState(false);
+  const [templates, setTemplates] = useState<PromptTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [customPrompt, setCustomPrompt] = useState("");
 
   useEffect(() => {
     loadReports();
     loadLLMProviders();
+    loadTemplates();
   }, []);
 
   async function loadReports() {
@@ -190,6 +198,51 @@ export default function Reports() {
       setLlmProviders(data.providers ?? []);
     } catch {
       // API unavailable
+    }
+  }
+
+  async function loadTemplates() {
+    try {
+      const data = await listTemplates();
+      setTemplates(data.templates ?? []);
+    } catch {
+      // API unavailable
+    }
+  }
+
+  function selectTemplate(templateId: string | null) {
+    setSelectedTemplateId(templateId);
+    if (templateId) {
+      const tpl = templates.find((t) => t.template_id === templateId);
+      if (tpl) setCustomPrompt(tpl.prompt_text);
+    } else {
+      setCustomPrompt("");
+    }
+  }
+
+  async function handleSaveTemplate() {
+    const trimmed = customPrompt.trim();
+    if (!trimmed) return;
+    const name = window.prompt("Template name:");
+    if (!name?.trim()) return;
+    try {
+      await createTemplate({ name: name.trim(), prompt_text: trimmed });
+      await loadTemplates();
+    } catch {
+      // silent fail
+    }
+  }
+
+  async function handleDeleteTemplate(templateId: string) {
+    try {
+      await apiDeleteTemplate(templateId);
+      setTemplates((prev) => prev.filter((t) => t.template_id !== templateId));
+      if (selectedTemplateId === templateId) {
+        setSelectedTemplateId(null);
+        setCustomPrompt("");
+      }
+    } catch {
+      // silent fail
     }
   }
 
@@ -237,6 +290,7 @@ export default function Reports() {
         document_ids: includeResearch && selectedDocIds.length > 0 ? selectedDocIds : undefined,
         llm_provider: selectedLLMProvider ?? undefined,
         llm_model: selectedLLMModel ?? undefined,
+        custom_prompt: customPrompt.trim() || undefined,
       });
       setGeneratedContent(result.content ?? "Report generated successfully.");
       loadReports();
@@ -470,6 +524,53 @@ export default function Reports() {
                 )}
               </div>
             )}
+          </div>
+
+          {/* Focus Instructions */}
+          <div>
+            <label className="text-xs text-terminal-muted uppercase tracking-wider block mb-2">
+              Focus Instructions
+            </label>
+            <select
+              value={selectedTemplateId ?? ""}
+              onChange={(e) => selectTemplate(e.target.value || null)}
+              className="w-full bg-terminal-bg border border-terminal-border rounded-md px-3 py-2 text-sm text-gray-300 focus:border-terminal-accent focus:outline-none mb-2"
+            >
+              <option value="">None (default analysis)</option>
+              {templates.map((t) => (
+                <option key={t.template_id} value={t.template_id}>
+                  {t.name}
+                  {t.is_default ? "" : " *"}
+                </option>
+              ))}
+            </select>
+            <textarea
+              value={customPrompt}
+              onChange={(e) => {
+                setCustomPrompt(e.target.value);
+                if (selectedTemplateId) setSelectedTemplateId(null);
+              }}
+              placeholder="Custom focus instructions for the LLM (e.g., 'Focus on tech earnings impact and Fed policy implications')"
+              rows={3}
+              className="w-full bg-terminal-bg border border-terminal-border rounded-md px-3 py-2 text-sm text-gray-300 placeholder:text-terminal-muted/60 focus:border-terminal-accent focus:outline-none resize-y"
+            />
+            <div className="flex items-center justify-between mt-1">
+              <button
+                onClick={handleSaveTemplate}
+                disabled={!customPrompt.trim()}
+                className="text-[11px] text-terminal-accent hover:underline disabled:text-terminal-muted disabled:no-underline disabled:cursor-default"
+              >
+                Save as template
+              </button>
+              {selectedTemplateId && !templates.find((t) => t.template_id === selectedTemplateId)?.is_default && (
+                <button
+                  onClick={() => handleDeleteTemplate(selectedTemplateId)}
+                  className="text-[11px] text-terminal-red hover:underline"
+                >
+                  Delete template
+                </button>
+              )}
+            </div>
           </div>
 
           <button

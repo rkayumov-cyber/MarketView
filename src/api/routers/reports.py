@@ -28,6 +28,7 @@ class ReportRequest(BaseModel):
     title: str | None = Field(default=None, description="Custom report title")
     llm_provider: str | None = Field(default=None, description="LLM provider for AI enhancement")
     llm_model: str | None = Field(default=None, description="LLM model name")
+    custom_prompt: str | None = Field(default=None, description="Custom focus instructions for LLM")
 
 
 class ReportResponse(BaseModel):
@@ -63,6 +64,7 @@ async def generate_report(request: ReportRequest) -> ReportResponse:
             title=request.title,
             llm_provider=request.llm_provider,
             llm_model=request.llm_model,
+            custom_prompt=request.custom_prompt,
         )
 
         # Build report

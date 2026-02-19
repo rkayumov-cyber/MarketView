@@ -30,6 +30,16 @@ def _format_research_context(chunks: list) -> str:
     return "\n".join(lines)
 
 
+def _format_custom_prompt(custom_prompt: str | None) -> str:
+    """Format custom focus instructions into a prompt block."""
+    if not custom_prompt:
+        return ""
+    return (
+        f"\n\nCUSTOM FOCUS INSTRUCTIONS:\n{custom_prompt}\n"
+        "Prioritize these focus areas in your analysis."
+    )
+
+
 def pulse_narrative_prompt(
     regime: str,
     confidence: float,
@@ -37,6 +47,7 @@ def pulse_narrative_prompt(
     sentiment_score: float | None = None,
     divergences: list[str] | None = None,
     research_context: list | None = None,
+    custom_prompt: str | None = None,
 ) -> str:
     signals_text = "\n".join(f"- {s}" for s in signals)
     parts = [
@@ -52,6 +63,7 @@ def pulse_narrative_prompt(
     data_block = "\n\n".join(parts)
     research_block = _format_research_context(research_context or [])
     extra = f"\n\n{research_block}\n\n{_RESEARCH_INSTRUCTION}" if research_block else ""
+    extra += _format_custom_prompt(custom_prompt)
     return (
         f"Given the following market data, write a compelling 2-3 paragraph "
         f"narrative (the 'big picture') for today's market pulse. "
@@ -83,6 +95,7 @@ def macro_outlook_prompt(
     asia_headline: str | None,
     existing_outlook: str,
     research_context: list | None = None,
+    custom_prompt: str | None = None,
 ) -> str:
     parts = []
     if us_headline:
@@ -94,6 +107,7 @@ def macro_outlook_prompt(
     regions = "\n".join(parts) if parts else "No regional data available"
     research_block = _format_research_context(research_context or [])
     extra = f"\n\n{research_block}\n\n{_RESEARCH_INSTRUCTION}" if research_block else ""
+    extra += _format_custom_prompt(custom_prompt)
     return (
         f"Regional macro summaries:\n{regions}\n\n"
         f"Current outlook: {existing_outlook}\n\n"
@@ -126,6 +140,7 @@ def sentiment_narrative_prompt(
     subreddit_summaries: list[str],
     contrarian_signals: list[str],
     research_context: list | None = None,
+    custom_prompt: str | None = None,
 ) -> str:
     tickers_text = ", ".join(f"${t[0]} ({t[1]})" for t in trending_tickers[:8])
     subs_text = "\n".join(f"- {s}" for s in subreddit_summaries)
@@ -136,6 +151,7 @@ def sentiment_narrative_prompt(
     )
     research_block = _format_research_context(research_context or [])
     extra = f"\n\n{research_block}\n\n{_RESEARCH_INSTRUCTION}" if research_block else ""
+    extra += _format_custom_prompt(custom_prompt)
     return (
         f"Retail sentiment data from Reddit ({total_posts} posts analyzed):\n"
         f"- Overall score: {overall_score:+.2f}\n"
@@ -156,10 +172,12 @@ def forward_lesson_prompt(
     outlier_event: str,
     existing_lesson: str,
     research_context: list | None = None,
+    custom_prompt: str | None = None,
 ) -> str:
     events_text = "\n".join(f"- {e}" for e in events[:5])
     research_block = _format_research_context(research_context or [])
     extra = f"\n\n{research_block}\n\n{_RESEARCH_INSTRUCTION}" if research_block else ""
+    extra += _format_custom_prompt(custom_prompt)
     return (
         f"Upcoming events:\n{events_text}\n"
         f"Outlier scenario: {outlier_event}\n"

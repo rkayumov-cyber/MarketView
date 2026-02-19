@@ -40,6 +40,7 @@ class SectionEnhancer:
         self,
         pulse: PulseSection,
         research_context: list | None = None,
+        custom_prompt: str | None = None,
     ) -> PulseSection:
         updates: dict = {}
 
@@ -56,6 +57,7 @@ class SectionEnhancer:
                 sentiment_score=sentiment_score,
                 divergences=divergence_descs or None,
                 research_context=research_context,
+                custom_prompt=custom_prompt,
             )
             narrative = await self._client.generate(prompt, SYSTEM_PROMPT)
             if narrative.strip():
@@ -89,6 +91,7 @@ class SectionEnhancer:
         self,
         macro: MacroSection,
         research_context: list | None = None,
+        custom_prompt: str | None = None,
     ) -> MacroSection:
         updates: dict = {}
 
@@ -100,6 +103,7 @@ class SectionEnhancer:
                 asia_headline=macro.asia.headline if macro.asia else None,
                 existing_outlook=macro.global_outlook,
                 research_context=research_context,
+                custom_prompt=custom_prompt,
             )
             outlook = await self._client.generate(prompt, SYSTEM_PROMPT)
             if outlook.strip():
@@ -132,6 +136,7 @@ class SectionEnhancer:
         self,
         sent: SentimentSection,
         research_context: list | None = None,
+        custom_prompt: str | None = None,
     ) -> SentimentSection:
         updates: dict = {}
 
@@ -149,6 +154,7 @@ class SectionEnhancer:
                 subreddit_summaries=sub_summaries,
                 contrarian_signals=sent.contrarian_signals,
                 research_context=research_context,
+                custom_prompt=custom_prompt,
             )
             narrative = await self._client.generate(prompt, SYSTEM_PROMPT)
             if narrative.strip():
@@ -164,6 +170,7 @@ class SectionEnhancer:
         self,
         forward: ForwardSection,
         research_context: list | None = None,
+        custom_prompt: str | None = None,
     ) -> ForwardSection:
         updates: dict = {}
 
@@ -177,6 +184,7 @@ class SectionEnhancer:
                 outlier_event=forward.outlier_event.event,
                 existing_lesson=forward.lesson_of_the_day,
                 research_context=research_context,
+                custom_prompt=custom_prompt,
             )
             lesson = await self._client.generate(prompt, SYSTEM_PROMPT)
             if lesson.strip():

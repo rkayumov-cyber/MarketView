@@ -7,7 +7,7 @@ from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 
 from src.config.settings import settings
-from src.storage.models import Base, Report, MarketSnapshot, RegimeHistory, Document
+from src.storage.models import Base, Report, MarketSnapshot, RegimeHistory, Document, PromptTemplate
 
 
 class Database:
@@ -243,6 +243,59 @@ class DocumentRepository:
         doc = await self.get_by_id(document_id)
         if doc:
             await self.session.delete(doc)
+            await self.session.commit()
+            return True
+        return False
+
+
+class PromptTemplateRepository:
+    """Repository for prompt template operations."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def save(self, template: PromptTemplate) -> PromptTemplate:
+        """Save a prompt template."""
+        self.session.add(template)
+        await self.session.commit()
+        await self.session.refresh(template)
+        return template
+
+    async def get_by_id(self, template_id: str) -> PromptTemplate | None:
+        """Get a template by its unique template_id."""
+        result = await self.session.execute(
+            select(PromptTemplate).where(PromptTemplate.template_id == template_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def list_all(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[PromptTemplate]:
+        """List templates ordered by creation date (defaults first, then newest)."""
+        result = await self.session.execute(
+            select(PromptTemplate)
+            .order_by(desc(PromptTemplate.is_default), desc(PromptTemplate.created_at))
+            .limit(limit)
+            .offset(offset)
+        )
+        return list(result.scalars().all())
+
+    async def count(self) -> int:
+        """Count total templates."""
+        from sqlalchemy import func
+
+        result = await self.session.execute(
+            select(func.count(PromptTemplate.id))
+        )
+        return result.scalar_one()
+
+    async def delete(self, template_id: str) -> bool:
+        """Delete a template by its template_id."""
+        tpl = await self.get_by_id(template_id)
+        if tpl:
+            await self.session.delete(tpl)
             await self.session.commit()
             return True
         return False

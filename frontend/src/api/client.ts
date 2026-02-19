@@ -83,6 +83,7 @@ export interface ReportRequest {
   title?: string;
   llm_provider?: string;
   llm_model?: string;
+  custom_prompt?: string;
 }
 
 export interface LLMProvider {
@@ -134,6 +135,45 @@ export async function deleteReport(reportId: string) {
 
 export function getDownloadUrl(reportId: string, format = "markdown") {
   return `/api/v1/reports/${reportId}/download?format=${format}`;
+}
+
+// ── Prompt Templates ───────────────────────────────────────
+
+export interface PromptTemplate {
+  template_id: string;
+  name: string;
+  description: string | null;
+  prompt_text: string;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export async function listTemplates() {
+  const { data } = await api.get("/api/v1/templates/");
+  return data as { templates: PromptTemplate[]; total: number };
+}
+
+export async function createTemplate(body: {
+  name: string;
+  description?: string;
+  prompt_text: string;
+}) {
+  const { data } = await api.post("/api/v1/templates/", body);
+  return data as PromptTemplate;
+}
+
+export async function updateTemplate(
+  templateId: string,
+  body: { name?: string; description?: string; prompt_text?: string },
+) {
+  const { data } = await api.put(`/api/v1/templates/${templateId}`, body);
+  return data as PromptTemplate;
+}
+
+export async function deleteTemplate(templateId: string) {
+  const { data } = await api.delete(`/api/v1/templates/${templateId}`);
+  return data;
 }
 
 // ── Market Data ────────────────────────────────────────────

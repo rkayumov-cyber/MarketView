@@ -38,6 +38,7 @@ class ReportConfig(BaseModel):
     title: str | None = None
     llm_provider: str | None = None
     llm_model: str | None = None
+    custom_prompt: str | None = None  # Free-text focus instructions for LLM
 
 
 class MarketRegimeInfo(BaseModel):

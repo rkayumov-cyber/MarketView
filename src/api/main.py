@@ -50,6 +50,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception:
         logger.warning("ChromaDB init failed — RAG features unavailable", exc_info=True)
 
+    # Seed default prompt templates
+    try:
+        from src.api.routers.templates import seed_defaults
+        await seed_defaults()
+    except Exception:
+        logger.warning("Prompt template seeding failed", exc_info=True)
+
     yield
 
     # Shutdown
@@ -89,13 +96,14 @@ app.add_middleware(
 )
 
 # Import and include routers
-from src.api.routers import data, health, market, reports, sources
+from src.api.routers import data, health, market, reports, sources, templates
 
 app.include_router(health.router, tags=["Health"])
 app.include_router(data.router, prefix="/api/v1/data", tags=["Data"])
 app.include_router(market.router, prefix="/api/v1/data/market", tags=["Market Data"])
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reports"])
 app.include_router(sources.router, prefix="/api/v1/sources", tags=["Sources"])
+app.include_router(templates.router, prefix="/api/v1/templates", tags=["Templates"])
 
 
 @app.get("/")

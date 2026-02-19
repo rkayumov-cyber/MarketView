@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import Column, String, Integer, DateTime, Text, JSON, Float, Index
+from sqlalchemy import Column, String, Integer, DateTime, Text, JSON, Float, Boolean, Index
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -135,6 +135,32 @@ class Document(Base):
             "file_size": self.file_size,
             "uploaded_at": self.uploaded_at.isoformat() if self.uploaded_at else None,
             "metadata": self.metadata_json,
+        }
+
+
+class PromptTemplate(Base):
+    """Saved prompt template for report generation focus instructions."""
+
+    __tablename__ = "prompt_templates"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    template_id = Column(String(64), unique=True, nullable=False, index=True)
+    name = Column(String(256), nullable=False)
+    description = Column(Text, nullable=True)
+    prompt_text = Column(Text, nullable=False)
+    is_default = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "template_id": self.template_id,
+            "name": self.name,
+            "description": self.description,
+            "prompt_text": self.prompt_text,
+            "is_default": self.is_default,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
 
