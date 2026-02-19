@@ -215,6 +215,29 @@ export async function getCrypto(source: MarketDataSource = "live") {
   return data;
 }
 
+// ── Reddit Sentiment ──────────────────────────────────────
+
+export async function getRedditSentiment(source: MarketDataSource = "live") {
+  const { data } = await api.get("/api/v1/reddit/sentiment", {
+    params: { source },
+  });
+  return data;
+}
+
+export async function getRedditPosts(source: MarketDataSource = "live") {
+  const { data } = await api.get("/api/v1/reddit/posts", {
+    params: { source },
+  });
+  return data;
+}
+
+export async function getRedditTrending(source: MarketDataSource = "live") {
+  const { data } = await api.get("/api/v1/reddit/trending", {
+    params: { source },
+  });
+  return data;
+}
+
 // ── Data Sources ───────────────────────────────────────────
 
 export interface DocumentMeta {

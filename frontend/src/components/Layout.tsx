@@ -4,6 +4,7 @@ import { useDataSource } from "../context/DataSourceContext";
 const navItems = [
   { to: "/", label: "Dashboard", icon: "\u25C8" },
   { to: "/market-data", label: "Market Data", icon: "\u25C9" },
+  { to: "/reddit", label: "Reddit Feed", icon: "\u25CC" },
   { to: "/reports", label: "Reports", icon: "\u25CA" },
   { to: "/data-sources", label: "Data Sources", icon: "\u25C6" },
   { to: "/health", label: "Health", icon: "\u25CF" },

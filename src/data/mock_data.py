@@ -587,6 +587,245 @@ def get_mock_commodities() -> dict:
     }
 
 
+def get_mock_reddit_sentiment() -> dict:
+    """Mock data matching RedditClient.get_overall_sentiment() + per-sub breakdown."""
+    subs = {
+        "wallstreetbets": {
+            "subreddit": "wallstreetbets",
+            "post_count": 87,
+            "avg_score": 342.6,
+            "avg_comments": 128.4,
+            "top_tickers": [["NVDA", 34], ["TSLA", 28], ["AMD", 19], ["AAPL", 15], ["GME", 12]],
+            "sentiment_score": 0.38,
+            "bullish_ratio": 0.64,
+            "timestamp": _ts(),
+        },
+        "stocks": {
+            "subreddit": "stocks",
+            "post_count": 62,
+            "avg_score": 189.2,
+            "avg_comments": 74.8,
+            "top_tickers": [["AAPL", 22], ["MSFT", 18], ["GOOGL", 14], ["AMZN", 11], ["META", 9]],
+            "sentiment_score": 0.22,
+            "bullish_ratio": 0.58,
+            "timestamp": _ts(),
+        },
+        "investing": {
+            "subreddit": "investing",
+            "post_count": 45,
+            "avg_score": 156.3,
+            "avg_comments": 62.1,
+            "top_tickers": [["VOO", 16], ["VTI", 12], ["SCHD", 9], ["AAPL", 8], ["BRK.B", 7]],
+            "sentiment_score": 0.15,
+            "bullish_ratio": 0.55,
+            "timestamp": _ts(),
+        },
+        "cryptocurrency": {
+            "subreddit": "cryptocurrency",
+            "post_count": 78,
+            "avg_score": 267.4,
+            "avg_comments": 95.6,
+            "top_tickers": [["BTC", 45], ["ETH", 32], ["SOL", 21], ["ADA", 14], ["XRP", 11]],
+            "sentiment_score": 0.42,
+            "bullish_ratio": 0.67,
+            "timestamp": _ts(),
+        },
+        "Bitcoin": {
+            "subreddit": "Bitcoin",
+            "post_count": 54,
+            "avg_score": 312.8,
+            "avg_comments": 83.2,
+            "top_tickers": [["BTC", 54], ["ETH", 8], ["MSTR", 6]],
+            "sentiment_score": 0.56,
+            "bullish_ratio": 0.74,
+            "timestamp": _ts(),
+        },
+        "ethereum": {
+            "subreddit": "ethereum",
+            "post_count": 41,
+            "avg_score": 198.5,
+            "avg_comments": 67.3,
+            "top_tickers": [["ETH", 41], ["BTC", 12], ["SOL", 5]],
+            "sentiment_score": 0.31,
+            "bullish_ratio": 0.62,
+            "timestamp": _ts(),
+        },
+        "options": {
+            "subreddit": "options",
+            "post_count": 38,
+            "avg_score": 124.7,
+            "avg_comments": 56.9,
+            "top_tickers": [["SPY", 28], ["QQQ", 18], ["TSLA", 15], ["NVDA", 12], ["AAPL", 9]],
+            "sentiment_score": -0.08,
+            "bullish_ratio": 0.47,
+            "timestamp": _ts(),
+        },
+        "SPACs": {
+            "subreddit": "SPACs",
+            "post_count": 19,
+            "avg_score": 45.2,
+            "avg_comments": 22.4,
+            "top_tickers": [["DWAC", 8], ["PSNY", 5], ["LCID", 4]],
+            "sentiment_score": -0.12,
+            "bullish_ratio": 0.42,
+            "timestamp": _ts(),
+        },
+    }
+    total_posts = sum(s["post_count"] for s in subs.values())
+    weighted_sentiment = sum(
+        s["sentiment_score"] * s["post_count"] for s in subs.values()
+    ) / total_posts
+    weighted_bullish = sum(
+        s["bullish_ratio"] * s["post_count"] for s in subs.values()
+    ) / total_posts
+    return {
+        "overall": {
+            "overall_sentiment": round(weighted_sentiment, 4),
+            "overall_bullish_ratio": round(weighted_bullish, 4),
+            "total_posts_analyzed": total_posts,
+            "subreddit_count": len(subs),
+            "trending_tickers": [
+                ["NVDA", 46], ["BTC", 111], ["ETH", 81], ["TSLA", 43],
+                ["AAPL", 54], ["SOL", 26], ["AMD", 19], ["MSFT", 18],
+                ["SPY", 28], ["GME", 12],
+            ],
+            "timestamp": _ts(),
+        },
+        "subreddits": subs,
+    }
+
+
+def get_mock_reddit_posts() -> dict:
+    """Mock data matching list of RedditPost.to_dict()."""
+    return {
+        "posts": [
+            {
+                "title": "NVDA earnings blew past expectations — $40B revenue quarter",
+                "subreddit": "wallstreetbets",
+                "score": 8742,
+                "num_comments": 2341,
+                "created_utc": _ts(),
+                "url": "https://reddit.com/r/wallstreetbets/comments/example1",
+                "is_self": True,
+                "tickers": ["NVDA"],
+            },
+            {
+                "title": "BTC breaking $100k was just the beginning — here's why",
+                "subreddit": "Bitcoin",
+                "score": 6218,
+                "num_comments": 1567,
+                "created_utc": _ts(),
+                "url": "https://reddit.com/r/Bitcoin/comments/example2",
+                "is_self": True,
+                "tickers": ["BTC"],
+            },
+            {
+                "title": "TSLA autonomous driving demo was underwhelming. Puts printing.",
+                "subreddit": "wallstreetbets",
+                "score": 5934,
+                "num_comments": 1823,
+                "created_utc": _ts(),
+                "url": "https://reddit.com/r/wallstreetbets/comments/example3",
+                "is_self": True,
+                "tickers": ["TSLA"],
+            },
+            {
+                "title": "ETH layer 2 adoption is accelerating — weekly active addresses up 340%",
+                "subreddit": "ethereum",
+                "score": 4521,
+                "num_comments": 876,
+                "created_utc": _ts(),
+                "url": "https://reddit.com/r/ethereum/comments/example4",
+                "is_self": True,
+                "tickers": ["ETH"],
+            },
+            {
+                "title": "Why AAPL's services revenue is the most underappreciated growth story",
+                "subreddit": "stocks",
+                "score": 3892,
+                "num_comments": 654,
+                "created_utc": _ts(),
+                "url": "https://reddit.com/r/stocks/comments/example5",
+                "is_self": True,
+                "tickers": ["AAPL"],
+            },
+            {
+                "title": "SPY 0DTE options volume hit all-time record today",
+                "subreddit": "options",
+                "score": 3241,
+                "num_comments": 542,
+                "created_utc": _ts(),
+                "url": "https://reddit.com/r/options/comments/example6",
+                "is_self": True,
+                "tickers": ["SPY"],
+            },
+            {
+                "title": "SOL ecosystem TVL surpasses $15B — DeFi summer 2.0?",
+                "subreddit": "cryptocurrency",
+                "score": 2987,
+                "num_comments": 723,
+                "created_utc": _ts(),
+                "url": "https://reddit.com/r/cryptocurrency/comments/example7",
+                "is_self": True,
+                "tickers": ["SOL"],
+            },
+            {
+                "title": "AMD MI300X benchmarks show it competing with H100 at half the price",
+                "subreddit": "stocks",
+                "score": 2876,
+                "num_comments": 498,
+                "created_utc": _ts(),
+                "url": "https://reddit.com/r/stocks/comments/example8",
+                "is_self": True,
+                "tickers": ["AMD", "NVDA"],
+            },
+            {
+                "title": "VOO vs VTI — which total market ETF for a 30-year horizon?",
+                "subreddit": "investing",
+                "score": 2341,
+                "num_comments": 387,
+                "created_utc": _ts(),
+                "url": "https://reddit.com/r/investing/comments/example9",
+                "is_self": True,
+                "tickers": ["VOO", "VTI"],
+            },
+            {
+                "title": "GME short interest climbing again — 22% of float",
+                "subreddit": "wallstreetbets",
+                "score": 2198,
+                "num_comments": 1245,
+                "created_utc": _ts(),
+                "url": "https://reddit.com/r/wallstreetbets/comments/example10",
+                "is_self": True,
+                "tickers": ["GME"],
+            },
+        ],
+    }
+
+
+def get_mock_reddit_trending() -> dict:
+    """Mock data matching RedditClient.get_trending_tickers() shape."""
+    return {
+        "tickers": [
+            {"symbol": "BTC", "mentions": 111},
+            {"symbol": "ETH", "mentions": 81},
+            {"symbol": "AAPL", "mentions": 54},
+            {"symbol": "NVDA", "mentions": 46},
+            {"symbol": "TSLA", "mentions": 43},
+            {"symbol": "SPY", "mentions": 28},
+            {"symbol": "SOL", "mentions": 26},
+            {"symbol": "AMD", "mentions": 19},
+            {"symbol": "MSFT", "mentions": 18},
+            {"symbol": "GOOGL", "mentions": 14},
+            {"symbol": "ADA", "mentions": 14},
+            {"symbol": "GME", "mentions": 12},
+            {"symbol": "QQQ", "mentions": 18},
+            {"symbol": "XRP", "mentions": 11},
+            {"symbol": "AMZN", "mentions": 11},
+        ],
+    }
+
+
 def get_mock_crypto() -> dict:
     """Mock data matching DataAggregator._fetch_crypto() shape."""
     return {

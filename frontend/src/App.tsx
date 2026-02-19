@@ -3,6 +3,7 @@ import { DataSourceProvider } from "./context/DataSourceContext";
 import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import MarketData from "./pages/MarketData";
+import RedditFeed from "./pages/RedditFeed";
 import Reports from "./pages/Reports";
 import Health from "./pages/Health";
 import DataSources from "./pages/DataSources";
@@ -14,6 +15,7 @@ export default function App() {
         <Route element={<Layout />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/market-data" element={<MarketData />} />
+          <Route path="/reddit" element={<RedditFeed />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/data-sources" element={<DataSources />} />
           <Route path="/health" element={<Health />} />
