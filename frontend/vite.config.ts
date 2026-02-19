@@ -52,7 +52,7 @@ function silentApiProxy(target: string): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), silentApiProxy("http://localhost:8000")],
+  plugins: [react(), silentApiProxy("http://localhost:8001")],
   server: {
     port: 5173,
   },
