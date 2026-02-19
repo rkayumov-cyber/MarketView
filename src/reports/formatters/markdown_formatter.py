@@ -29,6 +29,7 @@ class MarkdownFormatter:
 
         sections = [
             self._format_header(report),
+            self._format_executive_summary(report),
             self._format_pulse(report, num()),
         ]
 
@@ -46,28 +47,32 @@ class MarkdownFormatter:
         if report.research and report.research.insights:
             sections.append(self._format_research(report, num()))
 
-        sections.append(self._format_footer(report))
+        sections.append(self._format_footer())
 
-        return "\n\n".join(sections)
+        return "\n\n".join(s for s in sections if s)
 
     def _format_header(self, report: Report) -> str:
-        """Format report header."""
+        """Format report header — clean title and date only."""
+        date_line = report.created_at.strftime("%B %d, %Y at %H:%M UTC")
         lines = [
             f"# {report.title}",
-            "",
-            f"**Report ID:** {report.report_id}",
-            f"**Generated:** {report.created_at.strftime('%Y-%m-%d %H:%M UTC')}",
-            f"**Level:** {report.level.name}",
-            "",
-            "---",
+            f"*Generated {date_line}*",
         ]
         return "\n".join(lines)
 
+    def _format_executive_summary(self, report: Report) -> str:
+        """Format executive summary as a blockquote."""
+        if not report.executive_summary:
+            return ""
+        # Wrap each sentence-line as a blockquote
+        lines = [f"> {line}" for line in report.executive_summary.split("\n") if line.strip()]
+        return "\n".join(lines)
+
     def _format_pulse(self, report: Report, num: str) -> str:
-        """Format The Pulse section."""
+        """Format the Market Pulse section."""
         pulse = report.pulse
         lines = [
-            f"## {num}. THE PULSE",
+            f"## {num}. Market Pulse",
             "",
             f"### Market Regime: {pulse.regime.regime.replace('_', ' ').title()}",
             f"*Confidence: {pulse.regime.confidence:.0%}*",
@@ -83,23 +88,19 @@ class MarkdownFormatter:
                 lines.append(f"- {signal}")
             lines.append("")
 
-        # Divergences
+        # Divergences — clean callout blocks
         if pulse.divergences:
-            lines.append("### Divergences")
             for div in pulse.divergences:
-                lines.extend([
-                    f"**{div.description}**",
-                    f"- Data Signal: {div.data_signal}",
-                    f"- Sentiment Signal: {div.sentiment_signal}",
-                    "",
-                ])
+                lines.append(
+                    f"> **Divergence:** {div.description} — "
+                    f"data suggests {div.data_signal.lower()} "
+                    f"while sentiment points to {div.sentiment_signal.lower()}."
+                )
+                lines.append("")
 
-        # Big Narrative
-        lines.extend([
-            "### The Big Narrative",
-            pulse.big_narrative,
-            "",
-        ])
+        # Big Narrative — no subheading, just the text
+        lines.append(pulse.big_narrative)
+        lines.append("")
 
         # Key Takeaways
         lines.append("### Key Takeaways")
@@ -115,12 +116,11 @@ class MarkdownFormatter:
             return ""
 
         lines = [
-            f"## {num}. SENTIMENT ANALYSIS",
+            f"## {num}. Sentiment Analysis",
             "",
             f"**Overall: {sent.overall_label}** (score: {sent.overall_score:+.2f}, "
-            f"bullish ratio: {sent.bullish_ratio:.0%})",
-            f"*{sent.total_posts} posts analyzed across {sent.subreddit_count} subreddits "
-            f"({sent.source})*",
+            f"{sent.bullish_ratio:.0%} bullish)",
+            f"*{sent.total_posts} posts analyzed across {sent.subreddit_count} communities*",
             "",
             sent.narrative,
             "",
@@ -138,9 +138,9 @@ class MarkdownFormatter:
 
         # Subreddit breakdowns (L2+)
         if sent.subreddit_breakdowns and report.level >= ReportLevel.STANDARD:
-            lines.append("### Subreddit Breakdown")
+            lines.append("### Community Breakdown")
             lines.append("")
-            lines.append("| Subreddit | Score | Bullish | Posts | Top Ticker |")
+            lines.append("| Community | Score | Bullish | Posts | Top Ticker |")
             lines.append("|-----------|-------|---------|-------|------------|")
             for b in sent.subreddit_breakdowns:
                 top = f"${b.top_tickers[0][0]}" if b.top_tickers else "-"
@@ -160,69 +160,30 @@ class MarkdownFormatter:
         return "\n".join(lines)
 
     def _format_macro(self, report: Report, num: str) -> str:
-        """Format Macro Analysis section."""
+        """Format Macro Overview section."""
         macro = report.macro
         lines = [
-            f"## {num}. MACRO ANALYSIS",
+            f"## {num}. Macro Overview",
             "",
         ]
 
         # US
         if macro.us:
-            lines.extend([
-                "### 🇺🇸 United States",
-                macro.us.headline,
-                "",
-            ])
-
-            if macro.us.inflation and report.level >= ReportLevel.STANDARD:
-                lines.append(f"**Inflation:** {macro.us.inflation.get('assessment', 'N/A')}")
-
-            if macro.us.growth and report.level >= ReportLevel.STANDARD:
-                lines.append(f"**Growth:** {macro.us.growth.get('assessment', 'N/A')}")
-
-            if macro.us.policy and report.level >= ReportLevel.STANDARD:
-                lines.append(f"**Policy:** {macro.us.policy.get('assessment', 'N/A')}")
-
-            if macro.us.risks:
-                lines.append("\n**Risks:**")
-                for risk in macro.us.risks:
-                    lines.append(f"- {risk}")
-
-            if macro.us.opportunities:
-                lines.append("\n**Opportunities:**")
-                for opp in macro.us.opportunities:
-                    lines.append(f"- {opp}")
-
-            lines.append("")
+            lines.extend(self._format_region(
+                "United States", macro.us, report.level,
+            ))
 
         # EU
         if macro.eu:
-            lines.extend([
-                "### 🇪🇺 Europe",
-                macro.eu.headline,
-                "",
-            ])
-
-            if macro.eu.risks:
-                lines.append("**Risks:**")
-                for risk in macro.eu.risks:
-                    lines.append(f"- {risk}")
-            lines.append("")
+            lines.extend(self._format_region(
+                "Europe", macro.eu, report.level,
+            ))
 
         # Asia
         if macro.asia:
-            lines.extend([
-                "### 🌏 Asia",
-                macro.asia.headline,
-                "",
-            ])
-
-            if macro.asia.risks:
-                lines.append("**Risks:**")
-                for risk in macro.asia.risks:
-                    lines.append(f"- {risk}")
-            lines.append("")
+            lines.extend(self._format_region(
+                "Asia-Pacific", macro.asia, report.level,
+            ))
 
         # Global Outlook
         lines.extend([
@@ -239,11 +200,43 @@ class MarkdownFormatter:
 
         return "\n".join(lines)
 
+    def _format_region(
+        self, name: str, region, level: ReportLevel,
+    ) -> list[str]:
+        """Format a single macro region with consistent structure."""
+        lines = [
+            f"### {name}",
+            region.headline,
+            "",
+        ]
+
+        if region.inflation and level >= ReportLevel.STANDARD:
+            lines.append(f"**Inflation:** {region.inflation.get('assessment', 'N/A')}")
+
+        if region.growth and level >= ReportLevel.STANDARD:
+            lines.append(f"**Growth:** {region.growth.get('assessment', 'N/A')}")
+
+        if region.policy and level >= ReportLevel.STANDARD:
+            lines.append(f"**Policy:** {region.policy.get('assessment', 'N/A')}")
+
+        if region.risks:
+            lines.append("\n**Risks:**")
+            for risk in region.risks:
+                lines.append(f"- {risk}")
+
+        if region.opportunities:
+            lines.append("\n**Opportunities:**")
+            for opp in region.opportunities:
+                lines.append(f"- {opp}")
+
+        lines.append("")
+        return lines
+
     def _format_assets(self, report: Report, num: str) -> str:
-        """Format Asset Class section."""
+        """Format Asset Classes section."""
         assets = report.assets
         lines = [
-            f"## {num}. ASSET CLASS DEEP DIVE",
+            f"## {num}. Asset Classes",
             "",
         ]
 
@@ -345,13 +338,13 @@ class MarkdownFormatter:
         return "\n".join(lines)
 
     def _format_technicals(self, report: Report, num: str) -> str:
-        """Format Technicals section."""
+        """Format Technicals & Positioning section."""
         if not report.technicals:
             return ""
 
         tech = report.technicals
         lines = [
-            f"## {num}. TECHNICALS & POSITIONING",
+            f"## {num}. Technicals & Positioning",
             "",
         ]
 
@@ -412,7 +405,7 @@ class MarkdownFormatter:
         """Format Forward Watch section."""
         forward = report.forward
         lines = [
-            f"## {num}. THE FORWARD WATCH",
+            f"## {num}. Forward Watch",
             "",
             "### Lesson of the Day",
             f"*{forward.lesson_of_the_day}*",
@@ -453,14 +446,13 @@ class MarkdownFormatter:
         return "\n".join(lines)
 
     def _format_research(self, report: Report, num: str) -> str:
-        """Format the Research Insights section."""
+        """Format the Supporting Research section."""
         research = report.research
         if not research or not research.insights:
             return ""
 
         lines = [
-            f"## {num}. RESEARCH INSIGHTS",
-            f"*Sourced from {research.document_count} uploaded document(s)*",
+            f"## {num}. Supporting Research",
             "",
         ]
 
@@ -471,7 +463,7 @@ class MarkdownFormatter:
 
         section_labels = {
             "pulse": "Market Pulse",
-            "macro": "Macro Analysis",
+            "macro": "Macro Overview",
             "assets": "Asset Classes",
             "sentiment": "Sentiment",
             "forward": "Forward Watch",
@@ -479,28 +471,24 @@ class MarkdownFormatter:
 
         for section_key, insights in by_section.items():
             label = section_labels.get(section_key, section_key.title())
-            lines.append(f"### Relevant to: {label}")
+            lines.append(f"### {label}")
             lines.append("")
             for ins in insights:
-                page_str = f", p.{ins.page}" if ins.page else ""
-                score_pct = f"{ins.relevance_score * 100:.0f}%"
-                # Truncate very long excerpts
-                excerpt = ins.text[:300].rstrip()
-                if len(ins.text) > 300:
-                    excerpt += "..."
-                lines.append(f'> "{excerpt}" — *{ins.source}{page_str}* (relevance: {score_pct})')
+                # Clean excerpt — no truncation ellipsis, no scores
+                excerpt = ins.text.strip()
+                source_attr = f"*{ins.source}*"
+                lines.append(f"> {excerpt}")
+                lines.append(f"> — {source_attr}")
                 lines.append("")
 
         return "\n".join(lines)
 
-    def _format_footer(self, report: Report) -> str:
-        """Format report footer."""
+    def _format_footer(self) -> str:
+        """Format report footer — just the disclaimer."""
         lines = [
             "---",
             "",
             "*This report is generated automatically by MarketView and is for informational purposes only. "
             "It does not constitute investment advice.*",
-            "",
-            f"*Generated: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}*",
         ]
         return "\n".join(lines)

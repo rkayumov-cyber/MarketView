@@ -298,6 +298,8 @@ class Report(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     config: ReportConfig
 
+    executive_summary: str = ""
+
     pulse: PulseSection
     sentiment: SentimentSection | None = None
     macro: MacroSection

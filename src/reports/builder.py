@@ -194,6 +194,35 @@ class ReportBuilder:
         # Generate title
         title = config.title or self._generate_title(level, pulse)
 
+        # Generate executive summary
+        executive_summary = self._generate_executive_summary(pulse, macro, assets)
+
+        # LLM-enhance executive summary if provider configured
+        if config.llm_provider:
+            try:
+                from src.llm.client import LLMClient
+                from src.llm.enhancer import SectionEnhancer
+
+                llm = LLMClient(
+                    provider=config.llm_provider,
+                    model=config.llm_model,
+                )
+                enhancer = SectionEnhancer(llm)
+                section_headlines = [pulse.regime.description]
+                if macro.us:
+                    section_headlines.append(macro.us.headline)
+                if assets.equities:
+                    section_headlines.append(assets.equities.headline)
+                executive_summary = await enhancer.enhance_executive_summary(
+                    rule_based_summary=executive_summary,
+                    regime=pulse.regime.regime.replace("_", " ").title(),
+                    top_asset_move=self._get_top_asset_move(assets),
+                    macro_outlook=macro.global_outlook,
+                    section_headlines=section_headlines,
+                )
+            except Exception as e:
+                logger.warning("LLM exec summary enhancement failed: %s", e)
+
         metadata: dict = {
             "generated_at": datetime.now(UTC).isoformat(),
             "version": "1.0",
@@ -208,6 +237,7 @@ class ReportBuilder:
             report_id=report_id,
             title=title,
             level=level,
+            executive_summary=executive_summary,
             config=config,
             pulse=pulse,
             sentiment=sentiment,
@@ -218,6 +248,39 @@ class ReportBuilder:
             research=research_section,
             metadata=metadata,
         )
+
+    def _generate_executive_summary(self, pulse, macro, assets) -> str:
+        """Generate a rule-based executive summary from key sections."""
+        regime = pulse.regime.regime.replace("_", " ").title()
+        regime_desc = pulse.regime.description
+
+        top_move = self._get_top_asset_move(assets)
+        macro_outlook = macro.global_outlook
+
+        # 2-3 sentence summary combining regime + top move + macro
+        parts = [f"Markets are in a {regime.lower()} regime. {regime_desc}"]
+        if top_move:
+            parts.append(top_move)
+        # Add a short macro sentence (first sentence of outlook)
+        first_sentence = macro_outlook.split(". ")[0].rstrip(".")
+        if first_sentence:
+            parts.append(f"{first_sentence}.")
+
+        return " ".join(parts)
+
+    @staticmethod
+    def _get_top_asset_move(assets) -> str:
+        """Extract the most notable asset move for the summary."""
+        if assets.equities and assets.equities.us_indices:
+            for name, data in assets.equities.us_indices.items():
+                if isinstance(data, dict) and "change_percent" in data:
+                    change = data["change_percent"]
+                    price = data.get("current_price", 0)
+                    return (
+                        f"{name.upper()} is at {price:,.0f} "
+                        f"({change:+.2f}% on the day)."
+                    )
+        return ""
 
     def _generate_title(self, level: ReportLevel, pulse) -> str:
         """Generate report title based on content."""

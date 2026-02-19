@@ -3,9 +3,20 @@
 from __future__ import annotations
 
 SYSTEM_PROMPT = (
-    "You are an institutional-grade market analyst writing for a hedge fund's "
-    "daily briefing. Be concise, data-driven, and actionable. Avoid filler. "
-    "Use a confident, professional tone. Reference specific data points."
+    "You are an institutional-grade market analyst writing a self-contained "
+    "professional daily brief for a hedge fund. Be concise, data-driven, and "
+    "actionable. Use a confident, professional tone. Reference specific data "
+    "points.\n\n"
+    "IMPORTANT RULES:\n"
+    "- Write as a cohesive, self-contained document — each section should "
+    "feel like part of one unified narrative.\n"
+    "- Never reference internal system IDs, relevance scores, data pipeline "
+    "names, or technical metadata.\n"
+    "- Connect sections thematically — the macro environment should inform "
+    "asset views, which should inform positioning.\n"
+    "- Avoid filler phrases like 'it is important to note', 'it is worth "
+    "mentioning', or 'as we can see'.\n"
+    "- Do not mention Reddit, post counts, or social media platforms by name."
 )
 
 _RESEARCH_INSTRUCTION = (
@@ -40,6 +51,31 @@ def _format_custom_prompt(custom_prompt: str | None) -> str:
     )
 
 
+def executive_summary_prompt(
+    regime: str,
+    top_asset_move: str,
+    macro_outlook: str,
+    section_headlines: list[str] | None = None,
+) -> str:
+    """Prompt for polishing the executive summary."""
+    headlines = ""
+    if section_headlines:
+        headlines = "\n\nSection headlines:\n" + "\n".join(
+            f"- {h}" for h in section_headlines
+        )
+    return (
+        f"Market regime: {regime}\n"
+        f"Top asset move: {top_asset_move}\n"
+        f"Macro outlook: {macro_outlook}\n"
+        f"{headlines}\n\n"
+        f"Write a concise 2-3 sentence executive summary for today's daily "
+        f"brief. Tie together the regime, the most important asset move, and "
+        f"the macro backdrop into a cohesive opening statement. Write in "
+        f"present tense, as if briefing a portfolio manager at the start of "
+        f"the trading day."
+    )
+
+
 def pulse_narrative_prompt(
     regime: str,
     confidence: float,
@@ -67,6 +103,8 @@ def pulse_narrative_prompt(
     return (
         f"Given the following market data, write a compelling 2-3 paragraph "
         f"narrative (the 'big picture') for today's market pulse. "
+        f"Write as if this is the opening section of a professional daily "
+        f"brief — set the scene and establish the day's dominant theme. "
         f"Explain what the regime means, connect the signals, and highlight "
         f"what matters most for positioning.\n\n{data_block}{extra}"
     )
@@ -153,17 +191,19 @@ def sentiment_narrative_prompt(
     extra = f"\n\n{research_block}\n\n{_RESEARCH_INSTRUCTION}" if research_block else ""
     extra += _format_custom_prompt(custom_prompt)
     return (
-        f"Retail sentiment data from Reddit ({total_posts} posts analyzed):\n"
+        f"Retail sentiment data ({total_posts} data points analyzed):\n"
         f"- Overall score: {overall_score:+.2f}\n"
         f"- Bullish ratio: {bullish_ratio:.0%}\n"
         f"- Trending tickers: {tickers_text}\n\n"
-        f"Per-subreddit breakdown:\n{subs_text}\n\n"
+        f"Per-community breakdown:\n{subs_text}\n\n"
         f"Contrarian signals:\n{contrarian_text}\n\n"
-        f"Write a 2-3 paragraph sentiment analysis narrative. Cover: "
+        f"Write a 2-3 paragraph sentiment analysis narrative. Do not "
+        f"reference Reddit by name or mention post counts — focus on what "
+        f"the sentiment data implies for positioning. Cover: "
         f"(1) the overall mood and what's driving it, "
-        f"(2) notable divergences between communities, "
+        f"(2) notable divergences between investor communities, "
         f"(3) what this means for positioning — especially any contrarian "
-        f"implications. Reference specific tickers and subreddits.{extra}"
+        f"implications. Reference specific tickers where relevant.{extra}"
     )
 
 
@@ -184,5 +224,6 @@ def forward_lesson_prompt(
         f"Current lesson: {existing_lesson}\n\n"
         f"Write a thought-provoking 'lesson of the day' (2-3 sentences) "
         f"that ties the forward calendar to historical patterns or market "
-        f"wisdom. Be specific and non-generic.{extra}"
+        f"wisdom. Make the lesson feel connected to today's specific market "
+        f"context, not generic.{extra}"
     )

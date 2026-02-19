@@ -7,6 +7,7 @@ import logging
 from src.llm.client import LLMClient
 from src.llm.prompts import (
     SYSTEM_PROMPT,
+    executive_summary_prompt,
     pulse_narrative_prompt,
     pulse_takeaways_prompt,
     macro_outlook_prompt,
@@ -193,3 +194,27 @@ class SectionEnhancer:
             logger.warning("LLM forward lesson failed, keeping rule-based: %s", e)
 
         return forward.model_copy(update=updates) if updates else forward
+
+    # ── Executive Summary ─────────────────────────────────────
+
+    async def enhance_executive_summary(
+        self,
+        rule_based_summary: str,
+        regime: str,
+        top_asset_move: str,
+        macro_outlook: str,
+        section_headlines: list[str] | None = None,
+    ) -> str:
+        try:
+            prompt = executive_summary_prompt(
+                regime=regime,
+                top_asset_move=top_asset_move,
+                macro_outlook=macro_outlook,
+                section_headlines=section_headlines,
+            )
+            result = await self._client.generate(prompt, SYSTEM_PROMPT)
+            if result.strip():
+                return result.strip()
+        except Exception as e:
+            logger.warning("LLM executive summary failed, keeping rule-based: %s", e)
+        return rule_based_summary
