@@ -5,8 +5,10 @@ import {
   getDownloadUrl,
   deleteReport,
   getLLMProviders,
+  listDocuments,
   type ReportRequest,
   type LLMProvider,
+  type DocumentMeta,
 } from "../api/client";
 import StatusBadge from "../components/StatusBadge";
 
@@ -161,6 +163,10 @@ export default function Reports() {
   const [llmProviders, setLlmProviders] = useState<LLMProvider[]>([]);
   const [selectedLLMProvider, setSelectedLLMProvider] = useState<string | null>(null);
   const [selectedLLMModel, setSelectedLLMModel] = useState<string | null>(null);
+  const [includeResearch, setIncludeResearch] = useState(false);
+  const [documents, setDocuments] = useState<DocumentMeta[]>([]);
+  const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
+  const [docsLoaded, setDocsLoaded] = useState(false);
 
   useEffect(() => {
     loadReports();
@@ -187,6 +193,24 @@ export default function Reports() {
     }
   }
 
+  async function loadDocuments() {
+    if (docsLoaded) return;
+    try {
+      const data = await listDocuments(100);
+      setDocuments(data.documents ?? []);
+    } catch {
+      // API unavailable
+    } finally {
+      setDocsLoaded(true);
+    }
+  }
+
+  function toggleDocId(docId: string) {
+    setSelectedDocIds((prev) =>
+      prev.includes(docId) ? prev.filter((d) => d !== docId) : [...prev, docId],
+    );
+  }
+
   function selectProvider(providerId: string | null) {
     if (providerId === selectedLLMProvider) {
       setSelectedLLMProvider(null);
@@ -209,6 +233,8 @@ export default function Reports() {
         include_technicals: includeTechnicals,
         include_sentiment: includeSentiment,
         include_correlations: includeCorrelations,
+        include_research: includeResearch,
+        document_ids: includeResearch && selectedDocIds.length > 0 ? selectedDocIds : undefined,
         llm_provider: selectedLLMProvider ?? undefined,
         llm_model: selectedLLMModel ?? undefined,
       });
@@ -383,6 +409,66 @@ export default function Reports() {
                     </option>
                   ))}
               </select>
+            )}
+          </div>
+
+          {/* Research Documents */}
+          <div>
+            <label className="text-xs text-terminal-muted uppercase tracking-wider block mb-2">
+              Research Documents
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={includeResearch}
+                onChange={(e) => {
+                  setIncludeResearch(e.target.checked);
+                  if (e.target.checked) loadDocuments();
+                }}
+                className="accent-terminal-accent"
+              />
+              Include uploaded research
+            </label>
+            {includeResearch && docsLoaded && (
+              <div className="mt-2 space-y-1 max-h-40 overflow-y-auto border border-terminal-border/50 rounded-md p-2">
+                {documents.length === 0 ? (
+                  <p className="text-xs text-terminal-muted">
+                    No documents uploaded. Go to Data Sources to add research.
+                  </p>
+                ) : (
+                  <>
+                    <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer pb-1 border-b border-terminal-border/30 mb-1">
+                      <input
+                        type="radio"
+                        name="doc-scope"
+                        checked={selectedDocIds.length === 0}
+                        onChange={() => setSelectedDocIds([])}
+                        className="accent-terminal-accent"
+                      />
+                      All documents ({documents.length})
+                    </label>
+                    {documents.map((doc) => (
+                      <label
+                        key={doc.document_id}
+                        className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedDocIds.includes(doc.document_id)}
+                          onChange={() => toggleDocId(doc.document_id)}
+                          className="accent-terminal-accent"
+                        />
+                        <span className="truncate" title={doc.filename}>
+                          {doc.title || doc.filename}
+                        </span>
+                        <span className="text-terminal-muted ml-auto shrink-0">
+                          {doc.chunk_count} chunks
+                        </span>
+                      </label>
+                    ))}
+                  </>
+                )}
+              </div>
             )}
           </div>
 

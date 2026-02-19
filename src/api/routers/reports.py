@@ -22,7 +22,9 @@ class ReportRequest(BaseModel):
     include_technicals: bool = Field(default=True, description="Include technical analysis")
     include_sentiment: bool = Field(default=True, description="Include sentiment analysis")
     include_correlations: bool = Field(default=False, description="Include correlation matrix")
+    include_research: bool = Field(default=False, description="Include uploaded research documents")
     assets: list[str] | None = Field(default=None, description="Specific assets to analyze")
+    document_ids: list[str] | None = Field(default=None, description="Specific document IDs (None = all)")
     title: str | None = Field(default=None, description="Custom report title")
     llm_provider: str | None = Field(default=None, description="LLM provider for AI enhancement")
     llm_model: str | None = Field(default=None, description="LLM model name")
@@ -55,7 +57,9 @@ async def generate_report(request: ReportRequest) -> ReportResponse:
             include_technicals=request.include_technicals,
             include_sentiment=request.include_sentiment,
             include_correlations=request.include_correlations,
+            include_research=request.include_research,
             custom_assets=request.assets,
+            document_ids=request.document_ids,
             title=request.title,
             llm_provider=request.llm_provider,
             llm_model=request.llm_model,

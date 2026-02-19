@@ -36,7 +36,11 @@ class SectionEnhancer:
 
     # ── Pulse ────────────────────────────────────────────────
 
-    async def enhance_pulse(self, pulse: PulseSection) -> PulseSection:
+    async def enhance_pulse(
+        self,
+        pulse: PulseSection,
+        research_context: list | None = None,
+    ) -> PulseSection:
         updates: dict = {}
 
         # Enhance big_narrative
@@ -51,6 +55,7 @@ class SectionEnhancer:
                 signals=pulse.regime.signals,
                 sentiment_score=sentiment_score,
                 divergences=divergence_descs or None,
+                research_context=research_context,
             )
             narrative = await self._client.generate(prompt, SYSTEM_PROMPT)
             if narrative.strip():
@@ -80,7 +85,11 @@ class SectionEnhancer:
 
     # ── Macro ────────────────────────────────────────────────
 
-    async def enhance_macro(self, macro: MacroSection) -> MacroSection:
+    async def enhance_macro(
+        self,
+        macro: MacroSection,
+        research_context: list | None = None,
+    ) -> MacroSection:
         updates: dict = {}
 
         # Enhance global_outlook
@@ -90,6 +99,7 @@ class SectionEnhancer:
                 eu_headline=macro.eu.headline if macro.eu else None,
                 asia_headline=macro.asia.headline if macro.asia else None,
                 existing_outlook=macro.global_outlook,
+                research_context=research_context,
             )
             outlook = await self._client.generate(prompt, SYSTEM_PROMPT)
             if outlook.strip():
@@ -118,7 +128,11 @@ class SectionEnhancer:
 
     # ── Sentiment ─────────────────────────────────────────────
 
-    async def enhance_sentiment(self, sent: SentimentSection) -> SentimentSection:
+    async def enhance_sentiment(
+        self,
+        sent: SentimentSection,
+        research_context: list | None = None,
+    ) -> SentimentSection:
         updates: dict = {}
 
         try:
@@ -134,6 +148,7 @@ class SectionEnhancer:
                 trending_tickers=sent.trending_tickers,
                 subreddit_summaries=sub_summaries,
                 contrarian_signals=sent.contrarian_signals,
+                research_context=research_context,
             )
             narrative = await self._client.generate(prompt, SYSTEM_PROMPT)
             if narrative.strip():
@@ -145,7 +160,11 @@ class SectionEnhancer:
 
     # ── Forward ──────────────────────────────────────────────
 
-    async def enhance_forward(self, forward: ForwardSection) -> ForwardSection:
+    async def enhance_forward(
+        self,
+        forward: ForwardSection,
+        research_context: list | None = None,
+    ) -> ForwardSection:
         updates: dict = {}
 
         try:
@@ -157,6 +176,7 @@ class SectionEnhancer:
                 events=event_summaries,
                 outlier_event=forward.outlier_event.event,
                 existing_lesson=forward.lesson_of_the_day,
+                research_context=research_context,
             )
             lesson = await self._client.generate(prompt, SYSTEM_PROMPT)
             if lesson.strip():

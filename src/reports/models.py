@@ -32,7 +32,9 @@ class ReportConfig(BaseModel):
     include_technicals: bool = True
     include_sentiment: bool = True
     include_correlations: bool = True
+    include_research: bool = False
     custom_assets: list[str] | None = None
+    document_ids: list[str] | None = None  # None = search all documents
     title: str | None = None
     llm_provider: str | None = None
     llm_model: str | None = None
@@ -267,6 +269,25 @@ class ReportSection(BaseModel):
     content: Any
 
 
+class ResearchInsight(BaseModel):
+    """A single research insight included in a report."""
+
+    text: str
+    source: str
+    document_id: str
+    page: int | None
+    relevance_score: float
+    section: str  # which report section this is relevant to
+
+
+class ResearchInsightsSection(BaseModel):
+    """Collection of research insights from uploaded documents."""
+
+    insights: list[ResearchInsight]
+    document_count: int
+    total_chunks_searched: int
+
+
 class Report(BaseModel):
     """Complete market analysis report."""
 
@@ -282,6 +303,7 @@ class Report(BaseModel):
     assets: AssetSection
     technicals: TechnicalsSection | None = None
     forward: ForwardSection
+    research: ResearchInsightsSection | None = None
 
     metadata: dict[str, Any] = Field(default_factory=dict)
 

@@ -77,7 +77,9 @@ export interface ReportRequest {
   include_technicals?: boolean;
   include_sentiment?: boolean;
   include_correlations?: boolean;
+  include_research?: boolean;
   assets?: string[];
+  document_ids?: string[];
   title?: string;
   llm_provider?: string;
   llm_model?: string;

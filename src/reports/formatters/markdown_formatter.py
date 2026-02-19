@@ -42,6 +42,10 @@ class MarkdownFormatter:
             sections.append(self._format_technicals(report, num()))
 
         sections.append(self._format_forward(report, num()))
+
+        if report.research and report.research.insights:
+            sections.append(self._format_research(report, num()))
+
         sections.append(self._format_footer(report))
 
         return "\n\n".join(sections)
@@ -445,6 +449,47 @@ class MarkdownFormatter:
             lines.append("### Positioning Suggestions")
             for suggestion in forward.positioning_suggestions:
                 lines.append(f"- {suggestion}")
+
+        return "\n".join(lines)
+
+    def _format_research(self, report: Report, num: str) -> str:
+        """Format the Research Insights section."""
+        research = report.research
+        if not research or not research.insights:
+            return ""
+
+        lines = [
+            f"## {num}. RESEARCH INSIGHTS",
+            f"*Sourced from {research.document_count} uploaded document(s)*",
+            "",
+        ]
+
+        # Group insights by section
+        by_section: dict[str, list] = {}
+        for insight in research.insights:
+            by_section.setdefault(insight.section, []).append(insight)
+
+        section_labels = {
+            "pulse": "Market Pulse",
+            "macro": "Macro Analysis",
+            "assets": "Asset Classes",
+            "sentiment": "Sentiment",
+            "forward": "Forward Watch",
+        }
+
+        for section_key, insights in by_section.items():
+            label = section_labels.get(section_key, section_key.title())
+            lines.append(f"### Relevant to: {label}")
+            lines.append("")
+            for ins in insights:
+                page_str = f", p.{ins.page}" if ins.page else ""
+                score_pct = f"{ins.relevance_score * 100:.0f}%"
+                # Truncate very long excerpts
+                excerpt = ins.text[:300].rstrip()
+                if len(ins.text) > 300:
+                    excerpt += "..."
+                lines.append(f'> "{excerpt}" — *{ins.source}{page_str}* (relevance: {score_pct})')
+                lines.append("")
 
         return "\n".join(lines)
 

@@ -5,7 +5,13 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from src.reports.models import Report, ReportConfig, ReportLevel
+from src.reports.models import (
+    Report,
+    ReportConfig,
+    ReportLevel,
+    ResearchInsight,
+    ResearchInsightsSection,
+)
 from src.reports.sections import (
     PulseSectionBuilder,
     SentimentSectionBuilder,
@@ -99,6 +105,41 @@ class ReportBuilder:
             except Exception as e:
                 logger.warning("Failed to build Technicals section: %s", e)
 
+        # Research retrieval (if enabled)
+        research_context: dict[str, list] = {}
+        research_section = None
+        if config.include_research:
+            try:
+                from src.reports.research_context import ResearchRetriever
+
+                retriever = ResearchRetriever(document_ids=config.document_ids)
+                research_context = retriever.retrieve_for_sections()
+
+                # Build ResearchInsightsSection from all chunks
+                all_insights: list[ResearchInsight] = []
+                seen_doc_ids: set[str] = set()
+                for section_name, chunks in research_context.items():
+                    for chunk in chunks:
+                        seen_doc_ids.add(chunk.document_id)
+                        all_insights.append(
+                            ResearchInsight(
+                                text=chunk.text,
+                                source=chunk.source,
+                                document_id=chunk.document_id,
+                                page=chunk.page,
+                                relevance_score=chunk.score,
+                                section=section_name,
+                            )
+                        )
+                if all_insights:
+                    research_section = ResearchInsightsSection(
+                        insights=all_insights,
+                        document_count=len(seen_doc_ids),
+                        total_chunks_searched=retriever.total_chunks_searched,
+                    )
+            except Exception as e:
+                logger.warning("Research retrieval failed, continuing without: %s", e)
+
         # LLM enhancement (if provider configured)
         if config.llm_provider:
             try:
@@ -111,12 +152,26 @@ class ReportBuilder:
                 )
                 enhancer = SectionEnhancer(llm)
                 enhance_tasks = [
-                    enhancer.enhance_pulse(pulse),
-                    enhancer.enhance_macro(macro),
-                    enhancer.enhance_forward(forward),
+                    enhancer.enhance_pulse(
+                        pulse,
+                        research_context=research_context.get("pulse"),
+                    ),
+                    enhancer.enhance_macro(
+                        macro,
+                        research_context=research_context.get("macro"),
+                    ),
+                    enhancer.enhance_forward(
+                        forward,
+                        research_context=research_context.get("forward"),
+                    ),
                 ]
                 if sentiment:
-                    enhance_tasks.append(enhancer.enhance_sentiment(sentiment))
+                    enhance_tasks.append(
+                        enhancer.enhance_sentiment(
+                            sentiment,
+                            research_context=research_context.get("sentiment"),
+                        )
+                    )
                 enhanced = await asyncio.gather(
                     *enhance_tasks, return_exceptions=True
                 )
@@ -141,6 +196,8 @@ class ReportBuilder:
         if config.llm_provider:
             metadata["llm_provider"] = config.llm_provider
             metadata["llm_model"] = config.llm_model
+        if config.include_research:
+            metadata["include_research"] = True
 
         return Report(
             report_id=report_id,
@@ -153,6 +210,7 @@ class ReportBuilder:
             assets=assets,
             technicals=technicals,
             forward=forward,
+            research=research_section,
             metadata=metadata,
         )
 
