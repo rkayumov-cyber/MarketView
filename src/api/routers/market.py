@@ -14,6 +14,7 @@ from src.data.mock_data import (
     get_mock_fx,
     get_mock_snapshot,
 )
+from src.ingestion.market_data import twelve_data_client as td
 
 logger = logging.getLogger(__name__)
 
@@ -25,39 +26,43 @@ class DataSourceEnum(str, Enum):
     mock = "mock"
 
 
-async def _live_snapshot() -> dict[str, Any]:
-    from src.ingestion.aggregator import DataAggregator
-
-    agg = DataAggregator()
-    return await agg.get_quick_snapshot()
-
-
-async def _live_equities() -> dict[str, Any]:
-    from src.ingestion.aggregator import DataAggregator
-
-    agg = DataAggregator()
-    return await agg._fetch_equities()
-
-
-async def _live_fx() -> dict[str, Any]:
-    from src.ingestion.aggregator import DataAggregator
-
-    agg = DataAggregator()
-    return await agg._fetch_fx()
+def _source_tag(data: dict, td_keys: list[str], yf_keys: list[str]) -> str:
+    """Determine source tag based on which keys have data."""
+    has_td = any(data.get(k) for k in td_keys)
+    has_yf = any(data.get(k) for k in yf_keys)
+    if has_td and has_yf:
+        return "live (twelvedata+yfinance)"
+    if has_td:
+        return "live (twelvedata)"
+    if has_yf:
+        return "live (yfinance)"
+    return "live"
 
 
-async def _live_commodities() -> dict[str, Any]:
-    from src.ingestion.aggregator import DataAggregator
+async def _live_snapshot() -> tuple[dict[str, Any], str]:
+    data = await td.fetch_snapshot()
+    tag = _source_tag(data, ["bitcoin", "gold"], ["spx", "vix", "dxy"])
+    return data, tag
 
-    agg = DataAggregator()
-    return await agg._fetch_commodities()
+
+async def _live_equities() -> tuple[dict[str, Any], str]:
+    data = await td.fetch_equities()
+    return data, "live (yfinance)"
 
 
-async def _live_crypto() -> dict[str, Any]:
-    from src.ingestion.aggregator import DataAggregator
+async def _live_fx() -> tuple[dict[str, Any], str]:
+    data = await td.fetch_fx()
+    return data, "live (yfinance)"
 
-    agg = DataAggregator()
-    return await agg._fetch_crypto()
+
+async def _live_commodities() -> tuple[dict[str, Any], str]:
+    data = await td.fetch_commodities()
+    return data, "live (yfinance)"
+
+
+async def _live_crypto() -> tuple[dict[str, Any], str]:
+    data = await td.fetch_crypto()
+    return data, "live (twelvedata)"
 
 
 async def _fetch_with_fallback(
@@ -75,12 +80,14 @@ async def _fetch_with_fallback(
         }
 
     try:
-        data = await live_fn()
-        return {
-            "source": "live",
-            "timestamp": datetime.now(UTC).isoformat(),
-            "data": data,
-        }
+        data, source_tag = await live_fn()
+        if data:
+            return {
+                "source": source_tag,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": data,
+            }
+        raise ValueError(f"Empty data from live {label}")
     except Exception as e:
         logger.warning("Live %s fetch failed, falling back to mock: %s", label, e)
         return {

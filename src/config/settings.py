@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     # API Keys
     fred_api_key: SecretStr | None = None
+    twelve_data_api_key: str = ""
     reddit_client_id: SecretStr | None = None
     reddit_client_secret: SecretStr | None = None
     reddit_user_agent: str = "MarketView/1.0"
