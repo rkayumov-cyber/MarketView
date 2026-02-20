@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState, useCallback } from "react";
 import {
   LineChart,
   Line,
@@ -20,6 +20,8 @@ import {
   getCrypto,
 } from "../api/client";
 import { useDataSource } from "../context/DataSourceContext";
+import { useAutoRefresh } from "../hooks/useAutoRefresh";
+import RefreshBar from "../components/RefreshBar";
 
 type Tab = "equities" | "fixed-income" | "fx" | "commodities" | "crypto";
 
@@ -128,22 +130,20 @@ function EquitiesTab() {
   const [src, setSrc] = useState("");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
+  const fetchEquities = useCallback(async () => {
     setLoading(true);
-    getEquities(source)
-      .then((res) => {
-        if (!cancelled) {
-          setData(res.data);
-          setSrc(res.source);
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
+    try {
+      const res = await getEquities(source);
+      setData(res.data);
+      setSrc(res.source);
+    } catch {
+      // keep existing data
+    } finally {
+      setLoading(false);
+    }
   }, [source]);
+
+  const { lastUpdated, refreshing, refresh } = useAutoRefresh(fetchEquities, { deps: [source] });
 
   const usRows = data?.us
     ? Object.entries(data.us).map(([k, v]: [string, any]) => equityRow(k, v))
@@ -167,6 +167,7 @@ function EquitiesTab() {
 
   return (
     <div className="space-y-4">
+      <RefreshBar lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={refresh} />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="card">
           <h3 className="text-sm font-semibold mb-3">
@@ -249,27 +250,26 @@ function FixedIncomeTab() {
     null,
   );
 
-  useEffect(() => {
-    getFredRates()
-      .then((d) => setRatesData(d.data))
-      .catch(() => {});
-    getFredYieldCurve()
-      .then((d) => {
-        if (d?.data) {
-          const curve = [
-            { maturity: "FF", yield: d.data.fed_funds },
-            { maturity: "2Y", yield: d.data.treasury_2y },
-            { maturity: "10Y", yield: d.data.treasury_10y },
-            { maturity: "30Y", yield: d.data.treasury_30y },
-          ].filter((p) => p.yield != null);
-          if (curve.length > 0) setYieldCurve(curve);
-        }
-      })
-      .catch(() => {});
-    getFredCredit()
-      .then((d) => setCreditData(d.data))
-      .catch(() => {});
+  const fetchFixedIncome = useCallback(async () => {
+    const [rates, yc, credit] = await Promise.all([
+      getFredRates().catch(() => null),
+      getFredYieldCurve().catch(() => null),
+      getFredCredit().catch(() => null),
+    ]);
+    if (rates?.data) setRatesData(rates.data);
+    if (yc?.data) {
+      const curve = [
+        { maturity: "FF", yield: yc.data.fed_funds },
+        { maturity: "2Y", yield: yc.data.treasury_2y },
+        { maturity: "10Y", yield: yc.data.treasury_10y },
+        { maturity: "30Y", yield: yc.data.treasury_30y },
+      ].filter((p) => p.yield != null);
+      if (curve.length > 0) setYieldCurve(curve);
+    }
+    if (credit?.data) setCreditData(credit.data);
   }, []);
+
+  const { lastUpdated, refreshing, refresh } = useAutoRefresh(fetchFixedIncome);
 
   const ratesRows = ratesData
     ? Object.entries(ratesData).map(([key, val]: [string, any]) => ({
@@ -301,6 +301,7 @@ function FixedIncomeTab() {
 
   return (
     <div className="space-y-4">
+      <RefreshBar lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={refresh} />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="card">
           <h3 className="text-sm font-semibold mb-3">Key Rates</h3>
@@ -358,22 +359,20 @@ function FXTab() {
   const [src, setSrc] = useState("");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
+  const fetchFx = useCallback(async () => {
     setLoading(true);
-    getFx(source)
-      .then((res) => {
-        if (!cancelled) {
-          setData(res.data);
-          setSrc(res.source);
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
+    try {
+      const res = await getFx(source);
+      setData(res.data);
+      setSrc(res.source);
+    } catch {
+      // keep existing data
+    } finally {
+      setLoading(false);
+    }
   }, [source]);
+
+  const { lastUpdated, refreshing, refresh } = useAutoRefresh(fetchFx, { deps: [source] });
 
   const rows: { name: string; value: string; change: number }[] = [];
 
@@ -399,12 +398,15 @@ function FXTab() {
   }
 
   return (
-    <div className="card">
-      <h3 className="text-sm font-semibold mb-3">
-        Currency Pairs
-        <SourceBadge source={src} />
-      </h3>
-      <DataTable rows={rows} loading={loading} />
+    <div className="space-y-4">
+      <RefreshBar lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={refresh} />
+      <div className="card">
+        <h3 className="text-sm font-semibold mb-3">
+          Currency Pairs
+          <SourceBadge source={src} />
+        </h3>
+        <DataTable rows={rows} loading={loading} />
+      </div>
     </div>
   );
 }
@@ -415,22 +417,20 @@ function CommoditiesTab() {
   const [src, setSrc] = useState("");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
+  const fetchCommodities = useCallback(async () => {
     setLoading(true);
-    getCommodities(source)
-      .then((res) => {
-        if (!cancelled) {
-          setData(res.data);
-          setSrc(res.source);
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
+    try {
+      const res = await getCommodities(source);
+      setData(res.data);
+      setSrc(res.source);
+    } catch {
+      // keep existing data
+    } finally {
+      setLoading(false);
+    }
   }, [source]);
+
+  const { lastUpdated, refreshing, refresh } = useAutoRefresh(fetchCommodities, { deps: [source] });
 
   const sections: { title: string; rows: { name: string; value: string; change: number }[] }[] =
     [];
@@ -454,27 +454,33 @@ function CommoditiesTab() {
 
   if (loading) {
     return (
-      <div className="card">
-        <h3 className="text-sm font-semibold mb-3">
-          Commodities
-          <SourceBadge source={src} />
-        </h3>
-        <DataTable rows={[]} loading={true} />
+      <div className="space-y-4">
+        <RefreshBar lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={refresh} />
+        <div className="card">
+          <h3 className="text-sm font-semibold mb-3">
+            Commodities
+            <SourceBadge source={src} />
+          </h3>
+          <DataTable rows={[]} loading={true} />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      {sections.map((s) => (
-        <div key={s.title} className="card">
-          <h3 className="text-sm font-semibold mb-3">
-            {s.title}
-            <SourceBadge source={src} />
-          </h3>
-          <DataTable rows={s.rows} />
-        </div>
-      ))}
+    <div className="space-y-4">
+      <RefreshBar lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={refresh} />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {sections.map((s) => (
+          <div key={s.title} className="card">
+            <h3 className="text-sm font-semibold mb-3">
+              {s.title}
+              <SourceBadge source={src} />
+            </h3>
+            <DataTable rows={s.rows} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -485,22 +491,20 @@ function CryptoTab() {
   const [src, setSrc] = useState("");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
+  const fetchCrypto = useCallback(async () => {
     setLoading(true);
-    getCrypto(source)
-      .then((res) => {
-        if (!cancelled) {
-          setData(res.data);
-          setSrc(res.source);
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
+    try {
+      const res = await getCrypto(source);
+      setData(res.data);
+      setSrc(res.source);
+    } catch {
+      // keep existing data
+    } finally {
+      setLoading(false);
+    }
   }, [source]);
+
+  const { lastUpdated, refreshing, refresh } = useAutoRefresh(fetchCrypto, { deps: [source] });
 
   const assetRows: { name: string; value: string; change: number }[] = [];
   if (data?.assets) {
@@ -518,6 +522,7 @@ function CryptoTab() {
 
   return (
     <div className="space-y-4">
+      <RefreshBar lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={refresh} />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="card">
           <h3 className="text-sm font-semibold mb-3">

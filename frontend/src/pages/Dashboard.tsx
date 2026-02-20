@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState, useCallback } from "react";
 import {
   AreaChart,
   Area,
@@ -13,6 +13,7 @@ import {
 import MetricCard from "../components/MetricCard";
 import StatusBadge from "../components/StatusBadge";
 import ChartCard from "../components/ChartCard";
+import RefreshBar from "../components/RefreshBar";
 import {
   getHealth,
   getFredYieldCurve,
@@ -21,6 +22,7 @@ import {
   getMarketSnapshot,
 } from "../api/client";
 import { useDataSource } from "../context/DataSourceContext";
+import { useAutoRefresh } from "../hooks/useAutoRefresh";
 
 // Fallback data when both API + snapshot are unavailable
 const fallbackMetrics = {
@@ -68,132 +70,125 @@ export default function Dashboard() {
   const [sectors, setSectors] = useState(fallbackSectors);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [health, snapshotRes, ycData, ratesData, inflationData] =
+        await Promise.all([
+          getHealth().catch(() => null),
+          getMarketSnapshot(source).catch(() => null),
+          getFredYieldCurve().catch(() => null),
+          getFredRates().catch(() => null),
+          getFredInflation().catch(() => null),
+        ]);
 
-    async function fetchData() {
-      setLoading(true);
-      try {
-        const [health, snapshotRes, ycData, ratesData, inflationData] =
-          await Promise.all([
-            getHealth().catch(() => null),
-            getMarketSnapshot(source).catch(() => null),
-            getFredYieldCurve().catch(() => null),
-            getFredRates().catch(() => null),
-            getFredInflation().catch(() => null),
-          ]);
+      if (health) setApiStatus("online");
 
-        if (cancelled) return;
+      // Use snapshot data for metrics
+      if (snapshotRes?.data) {
+        const d = snapshotRes.data;
+        setDataSource(snapshotRes.source ?? "");
 
-        if (health) setApiStatus("online");
+        const newMetrics = { ...fallbackMetrics };
 
-        // Use snapshot data for metrics
-        if (snapshotRes?.data) {
-          const d = snapshotRes.data;
-          setDataSource(snapshotRes.source ?? "");
-
-          const newMetrics = { ...fallbackMetrics };
-
-          if (d.spx) {
-            newMetrics.spx = {
-              value: formatPrice(d.spx.current_price),
-              change: d.spx.change_percent,
-            };
-          }
-          if (d.vix) {
-            newMetrics.vix = {
-              value: formatPrice(d.vix.current_price),
-              change: d.vix.change_percent,
-            };
-          }
-          if (d.dxy) {
-            newMetrics.dxy = {
-              value: d.dxy.value?.toFixed(2) ?? d.dxy.rate?.toFixed(2) ?? "—",
-              change: d.dxy.change_percent,
-            };
-          }
-          if (d.bitcoin) {
-            newMetrics.btc = {
-              value: formatPrice(d.bitcoin.current_price),
-              change:
-                d.bitcoin.price_change_percentage_24h ??
-                d.bitcoin.change_percent ??
-                0,
-            };
-          }
-          if (d.gold) {
-            newMetrics.gold = {
-              value: formatPrice(d.gold.price ?? d.gold.current_price ?? 0),
-              change: d.gold.change_percent,
-            };
-          }
-
-          // Yield curve from snapshot
-          if (d.yield_curve) {
-            const yc = d.yield_curve;
-            const curve = [
-              { maturity: "FF", yield: yc.fed_funds },
-              { maturity: "2Y", yield: yc.treasury_2y },
-              ...(yc.treasury_5y != null
-                ? [{ maturity: "5Y", yield: yc.treasury_5y }]
-                : []),
-              { maturity: "10Y", yield: yc.treasury_10y },
-              { maturity: "30Y", yield: yc.treasury_30y },
-            ].filter((p) => p.yield != null);
-            if (curve.length > 0) setYieldCurve(curve);
-          }
-
-          setMetrics(newMetrics);
+        if (d.spx) {
+          newMetrics.spx = {
+            value: formatPrice(d.spx.current_price),
+            change: d.spx.change_percent,
+          };
+        }
+        if (d.vix) {
+          newMetrics.vix = {
+            value: formatPrice(d.vix.current_price),
+            change: d.vix.change_percent,
+          };
+        }
+        if (d.dxy) {
+          newMetrics.dxy = {
+            value: d.dxy.value?.toFixed(2) ?? d.dxy.rate?.toFixed(2) ?? "—",
+            change: d.dxy.change_percent,
+          };
+        }
+        if (d.bitcoin) {
+          newMetrics.btc = {
+            value: formatPrice(d.bitcoin.current_price),
+            change:
+              d.bitcoin.price_change_percentage_24h ??
+              d.bitcoin.change_percent ??
+              0,
+          };
+        }
+        if (d.gold) {
+          newMetrics.gold = {
+            value: formatPrice(d.gold.price ?? d.gold.current_price ?? 0),
+            change: d.gold.change_percent,
+          };
         }
 
-        // Override yield curve from FRED if available (more granular)
-        if (ycData?.data) {
-          const d = ycData.data;
+        // Yield curve from snapshot
+        if (d.yield_curve) {
+          const yc = d.yield_curve;
           const curve = [
-            { maturity: "FF", yield: d.fed_funds },
-            { maturity: "2Y", yield: d.treasury_2y },
-            { maturity: "10Y", yield: d.treasury_10y },
-            { maturity: "30Y", yield: d.treasury_30y },
+            { maturity: "FF", yield: yc.fed_funds },
+            { maturity: "2Y", yield: yc.treasury_2y },
+            ...(yc.treasury_5y != null
+              ? [{ maturity: "5Y", yield: yc.treasury_5y }]
+              : []),
+            { maturity: "10Y", yield: yc.treasury_10y },
+            { maturity: "30Y", yield: yc.treasury_30y },
           ].filter((p) => p.yield != null);
           if (curve.length > 0) setYieldCurve(curve);
         }
 
-        // Override 10Y from FRED rates
-        if (ratesData?.data) {
-          const tenY = ratesData.data.treasury_10y;
-          if (tenY?.latest_value != null) {
-            setMetrics((prev) => ({
-              ...prev,
-              tenYear: {
-                value: tenY.latest_value.toFixed(2),
-                change: tenY.pct_change ?? 0,
-                suffix: "%",
-              },
-            }));
-          }
-        }
-
-        // Regime from inflation
-        if (inflationData?.data) {
-          const cpi = inflationData.data.cpi;
-          if (cpi?.latest_value != null) {
-            if (cpi.latest_value > 3.0) setRegime("inflationary_expansion");
-            else if (cpi.latest_value < 1.5) setRegime("deflationary");
-            else setRegime("goldilocks");
-          }
-        }
-      } catch {
-        // keep fallback data
-      } finally {
-        if (!cancelled) setLoading(false);
+        setMetrics(newMetrics);
       }
-    }
 
-    fetchData();
-    return () => {
-      cancelled = true;
-    };
+      // Override yield curve from FRED if available (more granular)
+      if (ycData?.data) {
+        const d = ycData.data;
+        const curve = [
+          { maturity: "FF", yield: d.fed_funds },
+          { maturity: "2Y", yield: d.treasury_2y },
+          { maturity: "10Y", yield: d.treasury_10y },
+          { maturity: "30Y", yield: d.treasury_30y },
+        ].filter((p) => p.yield != null);
+        if (curve.length > 0) setYieldCurve(curve);
+      }
+
+      // Override 10Y from FRED rates
+      if (ratesData?.data) {
+        const tenY = ratesData.data.treasury_10y;
+        if (tenY?.latest_value != null) {
+          setMetrics((prev) => ({
+            ...prev,
+            tenYear: {
+              value: tenY.latest_value.toFixed(2),
+              change: tenY.pct_change ?? 0,
+              suffix: "%",
+            },
+          }));
+        }
+      }
+
+      // Regime from inflation
+      if (inflationData?.data) {
+        const cpi = inflationData.data.cpi;
+        if (cpi?.latest_value != null) {
+          if (cpi.latest_value > 3.0) setRegime("inflationary_expansion");
+          else if (cpi.latest_value < 1.5) setRegime("deflationary");
+          else setRegime("goldilocks");
+        }
+      }
+    } catch {
+      // keep fallback data
+    } finally {
+      setLoading(false);
+    }
   }, [source]);
+
+  const { lastUpdated, refreshing, refresh } = useAutoRefresh(fetchData, {
+    deps: [source],
+  });
 
   return (
     <div className="space-y-6">
@@ -201,9 +196,9 @@ export default function Dashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">Dashboard</h1>
-          <p className="text-xs text-terminal-muted mt-1">
-            Institutional market overview
-          </p>
+          <div className="mt-1">
+            <RefreshBar lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={refresh} />
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <StatusBadge status={regime} size="md" />

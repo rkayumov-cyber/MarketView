@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { DataSourceProvider } from "./context/DataSourceContext";
+import { RefreshProvider } from "./context/RefreshContext";
 import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import MarketData from "./pages/MarketData";
@@ -11,6 +12,7 @@ import DataSources from "./pages/DataSources";
 export default function App() {
   return (
     <DataSourceProvider>
+      <RefreshProvider>
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<Dashboard />} />
@@ -22,6 +24,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
+      </RefreshProvider>
     </DataSourceProvider>
   );
 }

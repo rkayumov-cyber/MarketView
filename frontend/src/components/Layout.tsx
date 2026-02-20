@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useDataSource } from "../context/DataSourceContext";
+import { useRefreshInterval, REFRESH_OPTIONS } from "../context/RefreshContext";
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: "\u25C8" },
@@ -12,6 +13,7 @@ const navItems = [
 
 export default function Layout() {
   const { source, setSource } = useDataSource();
+  const { interval, setInterval } = useRefreshInterval();
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -80,6 +82,29 @@ export default function Layout() {
               Mock
             </button>
           </div>
+
+          {/* Refresh interval selector */}
+          <div className="mb-3">
+            <div className="text-[10px] text-terminal-muted mb-1.5 uppercase tracking-wider">
+              Refresh
+            </div>
+            <div className="flex items-center gap-1">
+              {REFRESH_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setInterval(opt.value)}
+                  className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                    interval === opt.value
+                      ? "bg-blue-500/20 text-blue-400 ring-1 ring-blue-500/40"
+                      : "text-terminal-muted hover:text-gray-300 hover:bg-white/[0.04]"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="text-[10px] text-terminal-muted">
             <div>v1.0.0 — React Frontend</div>
             <div className="mt-1">API: localhost:8000</div>
