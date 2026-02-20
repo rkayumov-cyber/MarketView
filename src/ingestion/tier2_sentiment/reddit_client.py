@@ -1,17 +1,20 @@
-"""Reddit sentiment analysis client using PRAW."""
+"""Reddit sentiment analysis client using public JSON API (no auth required)."""
 
 import asyncio
+import logging
 import re
+import time
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-import praw
+import httpx
 
 from src.config.constants import REDDIT_SUBREDDITS
 from src.config.settings import settings
-from src.ingestion.base import DataSource
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -67,148 +70,172 @@ class SubredditSentiment:
         }
 
 
-class RedditClient(DataSource[dict[str, SubredditSentiment]]):
-    """Reddit API client for sentiment analysis."""
+# ── In-memory TTL cache (same pattern as twelve_data_client) ──
 
-    source_name = "reddit"
-    cache_ttl = settings.cache_ttl_reddit
-    rate_limit = settings.rate_limit_reddit
+class _MemCache:
+    def __init__(self, ttl: int = 300):
+        self._store: dict[str, tuple[float, Any]] = {}
+        self._ttl = ttl
+
+    def get(self, key: str) -> Any | None:
+        entry = self._store.get(key)
+        if entry and (time.monotonic() - entry[0]) < self._ttl:
+            return entry[1]
+        return None
+
+    def set(self, key: str, value: Any) -> None:
+        self._store[key] = (time.monotonic(), value)
+
+
+_cache = _MemCache(ttl=settings.cache_ttl_reddit)
+
+
+class RedditClient:
+    """Reddit client using public JSON API — no credentials required."""
 
     # Ticker pattern: $SYMBOL or standalone 2-5 letter uppercase
     TICKER_PATTERN = re.compile(r"\$([A-Z]{1,5})\b|\b([A-Z]{2,5})\b")
 
-    # Sentiment keywords
+    COMMON_WORDS = frozenset({
+        "I", "A", "THE", "TO", "AND", "OR", "FOR", "IS", "IT", "DD", "OP",
+        "CEO", "CFO", "IPO", "ETF", "GDP", "CPI", "FED", "SEC", "US", "UK",
+        "EU", "AI", "PM", "AM", "AT", "IN", "ON", "BY", "UP", "IF", "SO",
+        "MY", "HE", "WE", "DO", "NO", "AS", "OF", "IMO", "TBH", "PSA",
+        "RIP", "LOL", "WTF", "OMG", "FYI", "AMA", "ELI", "EDIT", "TLDR",
+        "NEW", "ALL", "ANY", "NOW", "OUT", "HAS", "NOT", "BUT", "ARE",
+        "HOW", "WHY", "JUST", "WHAT", "WHEN", "THIS", "THAT", "WITH",
+        "FROM", "WILL", "HAVE", "BEEN", "THEY", "VERY", "MOST", "SOME",
+        "THAN", "OVER", "LIKE", "ONLY", "ALSO", "MORE", "MUCH", "HERE",
+        "HIGH", "LOW", "GOOD", "BEST", "LAST", "NEXT", "LONG", "FREE",
+        # Options / trading jargon (not tickers)
+        "IV", "DTE", "ITM", "OTM", "ATM", "CSP", "CC", "PMCC", "LEAP",
+        "YOY", "QOQ", "MOM", "PE", "PB", "PS", "EPS", "NAV", "AUM",
+        "FAQ", "IQ", "QR", "GL", "PLC", "DA", "LD", "SD", "LU", "SU",
+        "ERC", "EIP", "EIPS", "BIP", "MPC", "AA", "VIP", "SMS", "GMT",
+        "NFL", "GPU", "CUDA", "WASM", "ECDSA", "OWASP", "HODL", "SELL",
+        "SPAC", "UMAC", "FOCIL", "EF", "USD", "EUR", "GBP", "JPY", "CAD",
+        "BUY", "CALL", "PUT", "ETF", "REIT", "CEO", "COO", "CTO",
+    })
+
     BULLISH_KEYWORDS = [
         "buy", "calls", "moon", "rocket", "bullish", "long", "yolo",
         "tendies", "gain", "pump", "breakout", "squeeze", "diamond hands",
         "hold", "hodl", "to the moon", "going up", "undervalued",
+        "rally", "rip", "green", "soar", "surge",
     ]
     BEARISH_KEYWORDS = [
         "sell", "puts", "crash", "bearish", "short", "dump", "tank",
-        "loss", "drop", "overvalued", "bubble", "puts", "paper hands",
-        "going down", "red", "blood", "rip", "correction",
+        "loss", "drop", "overvalued", "bubble", "paper hands",
+        "going down", "red", "blood", "correction", "plunge",
+        "bear", "fade", "drill",
     ]
 
+    _HEADERS = {
+        "User-Agent": settings.reddit_user_agent,
+    }
+
     def __init__(self) -> None:
-        super().__init__()
-        client_id = settings.reddit_client_id
-        client_secret = settings.reddit_client_secret
+        self._http = httpx.AsyncClient(
+            headers=self._HEADERS,
+            timeout=15.0,
+            follow_redirects=True,
+        )
 
-        if client_id and client_secret:
-            self._client = praw.Reddit(
-                client_id=client_id.get_secret_value(),
-                client_secret=client_secret.get_secret_value(),
-                user_agent=settings.reddit_user_agent,
-            )
-        else:
-            self._client = None
-            self.logger.warning("Reddit API credentials not configured")
+    # ── Public JSON API ────────────────────────────────────────
 
-    async def health_check(self) -> bool:
-        """Check Reddit API availability."""
-        if not self._client:
-            return False
+    async def _fetch_subreddit_json(
+        self,
+        subreddit: str,
+        sort: str = "hot",
+        limit: int = 50,
+        t: str = "day",
+    ) -> list[dict]:
+        """Fetch posts from Reddit's public JSON API."""
+        url = f"https://www.reddit.com/r/{subreddit}/{sort}.json"
+        params: dict[str, Any] = {"limit": limit, "raw_json": 1}
+        if sort == "top":
+            params["t"] = t
+
         try:
-            await asyncio.to_thread(lambda: self._client.subreddit("test").id)
-            return True
+            resp = await self._http.get(url, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+            children = data.get("data", {}).get("children", [])
+            return [c["data"] for c in children if c.get("kind") == "t3"]
         except Exception as e:
-            self.logger.error(f"Reddit health check failed: {e}")
-            return False
+            logger.warning("Failed to fetch r/%s: %s", subreddit, e)
+            return []
 
-    async def fetch_latest(self) -> dict[str, SubredditSentiment] | None:
-        """Fetch sentiment from all configured subreddits."""
-        return await self.get_all_sentiment()
+    # ── Ticker / sentiment helpers ─────────────────────────────
 
     def _extract_tickers(self, text: str) -> list[str]:
-        """Extract stock tickers from text."""
         matches = self.TICKER_PATTERN.findall(text)
+        seen: set[str] = set()
         tickers = []
         for match in matches:
             ticker = match[0] or match[1]
-            # Filter common words
-            if ticker not in {"I", "A", "THE", "TO", "AND", "OR", "FOR", "IS", "IT", "DD", "OP", "CEO", "CFO", "IPO", "ETF", "GDP", "CPI", "FED", "SEC"}:
+            if ticker not in self.COMMON_WORDS and ticker not in seen:
                 tickers.append(ticker)
+                seen.add(ticker)
         return tickers
 
     def _analyze_sentiment(self, text: str) -> float:
-        """Simple keyword-based sentiment analysis.
-
-        Returns:
-            Sentiment score from -1 (bearish) to 1 (bullish)
-        """
         text_lower = text.lower()
-
         bullish_count = sum(1 for kw in self.BULLISH_KEYWORDS if kw in text_lower)
         bearish_count = sum(1 for kw in self.BEARISH_KEYWORDS if kw in text_lower)
-
         total = bullish_count + bearish_count
         if total == 0:
             return 0.0
-
         return (bullish_count - bearish_count) / total
+
+    # ── Core public methods ────────────────────────────────────
 
     async def fetch_subreddit_posts(
         self,
         subreddit_name: str,
-        limit: int = 100,
+        limit: int = 50,
         time_filter: str = "day",
     ) -> list[RedditPost]:
-        """Fetch top posts from a subreddit."""
-        if not self._client:
-            self.logger.error("Reddit client not initialized")
-            return []
+        """Fetch posts from a subreddit via public JSON API."""
+        raw_posts = await self._fetch_subreddit_json(
+            subreddit_name, sort="hot", limit=limit, t=time_filter,
+        )
 
-        async def _fetch() -> list[RedditPost]:
-            try:
-                subreddit = self._client.subreddit(subreddit_name)
-                posts = []
-
-                for submission in subreddit.top(time_filter=time_filter, limit=limit):
-                    text = f"{submission.title} {submission.selftext}"
-                    tickers = self._extract_tickers(text)
-
-                    posts.append(RedditPost(
-                        title=submission.title,
-                        subreddit=subreddit_name,
-                        score=submission.score,
-                        num_comments=submission.num_comments,
-                        created_utc=datetime.fromtimestamp(submission.created_utc, tz=UTC),
-                        url=f"https://reddit.com{submission.permalink}",
-                        is_self=submission.is_self,
-                        selftext=submission.selftext[:500] if submission.selftext else "",
-                        tickers=tickers,
-                    ))
-
-                return posts
-            except Exception as e:
-                self.logger.error(f"Error fetching r/{subreddit_name}: {e}")
-                return []
-
-        # Run synchronous PRAW in thread pool
-        return await asyncio.to_thread(_fetch)
+        posts = []
+        for p in raw_posts:
+            text = f"{p.get('title', '')} {p.get('selftext', '')}"
+            tickers = self._extract_tickers(text)
+            posts.append(RedditPost(
+                title=p.get("title", ""),
+                subreddit=subreddit_name,
+                score=p.get("score", 0),
+                num_comments=p.get("num_comments", 0),
+                created_utc=datetime.fromtimestamp(p.get("created_utc", 0), tz=UTC),
+                url=f"https://reddit.com{p.get('permalink', '')}",
+                is_self=p.get("is_self", False),
+                selftext=(p.get("selftext", "") or "")[:500],
+                tickers=tickers,
+            ))
+        return posts
 
     async def analyze_subreddit(
         self,
         subreddit_name: str,
-        limit: int = 100,
+        limit: int = 50,
     ) -> SubredditSentiment | None:
         """Analyze sentiment for a subreddit."""
         posts = await self.fetch_subreddit_posts(subreddit_name, limit)
-
         if not posts:
             return None
 
-        # Aggregate metrics
         total_score = sum(p.score for p in posts)
         total_comments = sum(p.num_comments for p in posts)
 
-        # Ticker frequency
         all_tickers: list[str] = []
         for p in posts:
             all_tickers.extend(p.tickers)
         ticker_counts = Counter(all_tickers).most_common(10)
 
-        # Sentiment analysis
         sentiments = []
         for p in posts:
             text = f"{p.title} {p.selftext}"
@@ -229,48 +256,43 @@ class RedditClient(DataSource[dict[str, SubredditSentiment]]):
         )
 
     async def get_all_sentiment(self) -> dict[str, SubredditSentiment]:
-        """Get sentiment from all configured subreddits."""
-        async def _fetch_all() -> dict[str, SubredditSentiment]:
-            tasks = [
-                self.analyze_subreddit(sub)
-                for sub in REDDIT_SUBREDDITS
-            ]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+        """Get sentiment from all configured subreddits (cached)."""
+        cached = _cache.get("all_sentiment")
+        if cached is not None:
+            return cached
 
-            sentiment_data = {}
-            for sub, result in zip(REDDIT_SUBREDDITS, results):
-                if isinstance(result, SubredditSentiment):
-                    sentiment_data[sub] = result
-                elif isinstance(result, Exception):
-                    self.logger.error(f"Error analyzing r/{sub}: {result}")
+        tasks = [self.analyze_subreddit(sub) for sub in REDDIT_SUBREDDITS]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            return sentiment_data
+        sentiment_data: dict[str, SubredditSentiment] = {}
+        for sub, result in zip(REDDIT_SUBREDDITS, results):
+            if isinstance(result, SubredditSentiment):
+                sentiment_data[sub] = result
+            elif isinstance(result, Exception):
+                logger.warning("Error analyzing r/%s: %s", sub, result)
 
-        return await self._with_cache("get_all_sentiment", _fetch_all)
+        if sentiment_data:
+            _cache.set("all_sentiment", sentiment_data)
+        return sentiment_data
 
     async def get_trending_tickers(self, limit: int = 20) -> list[tuple[str, int]]:
         """Get trending tickers across all subreddits."""
         sentiment_data = await self.get_all_sentiment()
-
-        # Aggregate ticker counts
         all_tickers: Counter[str] = Counter()
         for data in sentiment_data.values():
             for ticker, count in data.top_tickers:
                 all_tickers[ticker] += count
-
         return all_tickers.most_common(limit)
 
     async def get_overall_sentiment(self) -> dict[str, Any]:
         """Get overall market sentiment summary."""
         sentiment_data = await self.get_all_sentiment()
-
         if not sentiment_data:
-            return {"error": "No sentiment data available"}
+            return {}
 
-        # Weighted average by post count
         total_posts = sum(d.post_count for d in sentiment_data.values())
         if total_posts == 0:
-            return {"error": "No posts found"}
+            return {}
 
         weighted_sentiment = sum(
             d.sentiment_score * d.post_count for d in sentiment_data.values()
@@ -283,10 +305,21 @@ class RedditClient(DataSource[dict[str, SubredditSentiment]]):
         trending = await self.get_trending_tickers(10)
 
         return {
-            "overall_sentiment": weighted_sentiment,
-            "overall_bullish_ratio": weighted_bullish,
+            "overall_sentiment": round(weighted_sentiment, 4),
+            "overall_bullish_ratio": round(weighted_bullish, 4),
             "total_posts_analyzed": total_posts,
             "subreddit_count": len(sentiment_data),
             "trending_tickers": trending,
             "timestamp": datetime.now(UTC).isoformat(),
         }
+
+    async def health_check(self) -> bool:
+        """Check Reddit public API availability."""
+        try:
+            resp = await self._http.get(
+                "https://www.reddit.com/r/stocks/hot.json",
+                params={"limit": 1, "raw_json": 1},
+            )
+            return resp.status_code == 200
+        except Exception:
+            return False

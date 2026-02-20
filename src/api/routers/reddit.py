@@ -64,8 +64,10 @@ async def _fetch_with_fallback(
 
 async def _live_sentiment() -> dict[str, Any]:
     client = _get_reddit_client()
-    overall = await client.get_overall_sentiment()
     all_subs = await client.get_all_sentiment()
+    if not all_subs:
+        return {}
+    overall = await client.get_overall_sentiment()
     return {
         "overall": overall,
         "subreddits": {k: v.to_dict() for k, v in all_subs.items()},
@@ -80,6 +82,8 @@ async def _live_posts() -> dict[str, Any]:
     for sub in REDDIT_SUBREDDITS:
         posts = await client.fetch_subreddit_posts(sub, limit=25, time_filter="day")
         all_posts.extend(p.to_dict() for p in posts)
+    if not all_posts:
+        return {}
     all_posts.sort(key=lambda p: p["score"], reverse=True)
     return {"posts": all_posts[:50]}
 
@@ -87,6 +91,8 @@ async def _live_posts() -> dict[str, Any]:
 async def _live_trending() -> dict[str, Any]:
     client = _get_reddit_client()
     trending = await client.get_trending_tickers(20)
+    if not trending:
+        return {}
     return {
         "tickers": [{"symbol": sym, "mentions": cnt} for sym, cnt in trending],
     }

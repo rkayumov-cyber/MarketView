@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState, useCallback } from "react";
 import {
   BarChart,
   Bar,
@@ -9,12 +9,14 @@ import {
   Cell,
 } from "recharts";
 import ChartCard from "../components/ChartCard";
+import RefreshBar from "../components/RefreshBar";
 import {
   getRedditSentiment,
   getRedditPosts,
   getRedditTrending,
 } from "../api/client";
 import { useDataSource } from "../context/DataSourceContext";
+import { useAutoRefresh } from "../hooks/useAutoRefresh";
 
 // ── Helpers ────────────────────────────────────────────────
 
@@ -306,29 +308,30 @@ export default function RedditFeed() {
   const [src, setSrc] = useState("");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
+  const fetchReddit = useCallback(async () => {
     setLoading(true);
-
-    Promise.all([
-      getRedditSentiment(source).catch(() => null),
-      getRedditPosts(source).catch(() => null),
-      getRedditTrending(source).catch(() => null),
-    ]).then(([sentRes, postsRes, trendRes]) => {
-      if (cancelled) return;
+    try {
+      const [sentRes, postsRes, trendRes] = await Promise.all([
+        getRedditSentiment(source).catch(() => null),
+        getRedditPosts(source).catch(() => null),
+        getRedditTrending(source).catch(() => null),
+      ]);
       if (sentRes) {
         setSentiment(sentRes.data);
         setSrc(sentRes.source);
       }
       if (postsRes) setPosts(postsRes.data);
       if (trendRes) setTrending(trendRes.data);
+    } catch {
+      // keep existing data
+    } finally {
       setLoading(false);
-    });
-
-    return () => {
-      cancelled = true;
-    };
+    }
   }, [source]);
+
+  const { lastUpdated, refreshing, refresh } = useAutoRefresh(fetchReddit, {
+    deps: [source],
+  });
 
   if (loading) {
     return (
@@ -350,9 +353,9 @@ export default function RedditFeed() {
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-bold">Reddit Feed</h1>
-        <p className="text-xs text-terminal-muted mt-1">
-          Sentiment analysis across 8 finance subreddits
-        </p>
+        <div className="mt-1">
+          <RefreshBar lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={refresh} />
+        </div>
       </div>
 
       {/* Sentiment Gauge */}
