@@ -52,58 +52,48 @@ class ReportBuilder:
         # Generate report ID
         report_id = f"RPT-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:6]}"
 
-        # Build sections concurrently where possible
-        pulse_task = self.pulse_builder.build(level)
-        macro_task = self.macro_builder.build(level)
-        asset_task = self.asset_builder.build(level)
-        forward_task = self.forward_builder.build(level)
+        # Build all sections concurrently
+        tasks: list[asyncio.Task] = []
+        task_names: list[str] = []
 
-        # Sentiment is optional
-        sentiment_task = None
+        # Core sections (always present)
+        for name, builder in [
+            ("pulse", self.pulse_builder),
+            ("macro", self.macro_builder),
+            ("assets", self.asset_builder),
+            ("forward", self.forward_builder),
+        ]:
+            tasks.append(builder.build(level))
+            task_names.append(name)
+
+        # Optional sections — gather alongside core for max parallelism
         if config.include_sentiment:
-            sentiment_task = self.sentiment_builder.build(level)
+            tasks.append(self.sentiment_builder.build(level))
+            task_names.append("sentiment")
 
-        # Technicals is optional
-        technicals_task = None
         if config.include_technicals:
-            technicals_task = self.technicals_builder.build(level)
+            tasks.append(self.technicals_builder.build(level))
+            task_names.append("technicals")
 
-        # Gather results
-        results = await asyncio.gather(
-            pulse_task,
-            macro_task,
-            asset_task,
-            forward_task,
-            return_exceptions=True,
-        )
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        pulse, macro, assets, forward = results
+        # Unpack results by name
+        sections: dict[str, object] = {}
+        for name, result in zip(task_names, results):
+            if isinstance(result, Exception):
+                if name in ("pulse", "macro", "assets", "forward"):
+                    raise RuntimeError(f"Failed to build {name} section: {result}")
+                logger.warning("Failed to build %s section: %s", name, result)
+                sections[name] = None
+            else:
+                sections[name] = result
 
-        # Handle any errors
-        if isinstance(pulse, Exception):
-            raise RuntimeError(f"Failed to build Pulse section: {pulse}")
-        if isinstance(macro, Exception):
-            raise RuntimeError(f"Failed to build Macro section: {macro}")
-        if isinstance(assets, Exception):
-            raise RuntimeError(f"Failed to build Assets section: {assets}")
-        if isinstance(forward, Exception):
-            raise RuntimeError(f"Failed to build Forward section: {forward}")
-
-        # Get sentiment if requested
-        sentiment = None
-        if sentiment_task:
-            try:
-                sentiment = await sentiment_task
-            except Exception as e:
-                logger.warning("Failed to build Sentiment section: %s", e)
-
-        # Get technicals if requested
-        technicals = None
-        if technicals_task:
-            try:
-                technicals = await technicals_task
-            except Exception as e:
-                logger.warning("Failed to build Technicals section: %s", e)
+        pulse = sections["pulse"]
+        macro = sections["macro"]
+        assets = sections["assets"]
+        forward = sections["forward"]
+        sentiment = sections.get("sentiment")
+        technicals = sections.get("technicals")
 
         # Research retrieval (if enabled)
         research_context: dict[str, list] = {}

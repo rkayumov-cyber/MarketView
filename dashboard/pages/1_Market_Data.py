@@ -1,6 +1,5 @@
-"""Market Data Explorer page."""
+"""Step 1: Market Data Explorer — fetch real data from backend API."""
 
-import asyncio
 from datetime import datetime
 
 import streamlit as st
@@ -8,259 +7,374 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-st.set_page_config(
-    page_title="Market Data - MarketView",
-    page_icon="📈",
-    layout="wide",
+st.set_page_config(page_title="Market Data - MarketView", page_icon="📈", layout="wide")
+
+from dashboard.workflow_state import (
+    WORKFLOW_CSS,
+    init_session_state,
+    mark_step_complete,
+    render_sidebar,
+    render_workflow_steps,
+)
+from dashboard import api_client
+
+init_session_state()
+st.markdown(WORKFLOW_CSS, unsafe_allow_html=True)
+render_sidebar()
+
+# ── Header ──────────────────────────────────────────────────
+
+st.title("Step 1: Market Data Explorer")
+render_workflow_steps(current_step=1)
+st.markdown("")
+
+# ── Load Data ───────────────────────────────────────────────
+
+source_label = st.session_state.get("data_source", "live")
+st.caption(f"Data source: **{source_label}**")
+
+if st.button("Load All Market Data", type="primary", use_container_width=True):
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    endpoints = [
+        ("Snapshot", api_client.fetch_snapshot, "market_snapshot"),
+        ("Equities", api_client.fetch_equities, "market_equities"),
+        ("FX", api_client.fetch_fx, "market_fx"),
+        ("Commodities", api_client.fetch_commodities, "market_commodities"),
+        ("Crypto", api_client.fetch_crypto, "market_crypto"),
+    ]
+
+    progress = st.progress(0)
+    status = st.empty()
+    status.text("Fetching all market data in parallel...")
+
+    results: dict[str, dict | None] = {}
+    with ThreadPoolExecutor(max_workers=len(endpoints)) as pool:
+        futures = {pool.submit(fn): (label, key) for label, fn, key in endpoints}
+        done_count = 0
+        for future in as_completed(futures):
+            label, key = futures[future]
+            results[key] = future.result()
+            done_count += 1
+            progress.progress(done_count / len(endpoints))
+
+    for key, result in results.items():
+        if result:
+            st.session_state[key] = result
+
+    status.empty()
+    st.session_state["market_data_timestamp"] = datetime.utcnow().isoformat()[:19]
+    mark_step_complete("market_data")
+    st.success("All market data loaded!")
+    st.rerun()
+
+# ── Check if data loaded ───────────────────────────────────
+
+has_data = st.session_state.get("market_equities") is not None
+
+if not has_data:
+    st.info("Click **Load All Market Data** above to fetch live data from the backend.")
+    st.stop()
+
+ts = st.session_state.get("market_data_timestamp", "")
+if ts:
+    st.caption(f"Last loaded: {ts}")
+
+st.markdown("---")
+
+# ── Tabs ────────────────────────────────────────────────────
+
+tab_eq, tab_fx, tab_comm, tab_crypto = st.tabs(
+    ["Equities", "FX", "Commodities", "Crypto"]
 )
 
-st.title("📈 Market Data Explorer")
-st.markdown("Real-time market data across all asset classes")
 
-# Tabs for different asset classes
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "🏛️ Equities", "💵 Fixed Income", "💱 FX", "🪙 Commodities", "₿ Crypto"
-])
+# ── Helper ──────────────────────────────────────────────────
 
-with tab1:
-    st.subheader("Equity Markets")
+def _fmt_price(val, prefix="", decimals=2):
+    if val is None:
+        return "N/A"
+    return f"{prefix}{val:,.{decimals}f}"
+
+
+def _fmt_change(change, change_pct):
+    if change is None:
+        return "N/A"
+    sign = "+" if change >= 0 else ""
+    pct_str = f" ({sign}{change_pct:.2f}%)" if change_pct is not None else ""
+    return f"{sign}{change:,.2f}{pct_str}"
+
+
+# ── Equities Tab ────────────────────────────────────────────
+
+with tab_eq:
+    eq_data = st.session_state["market_equities"].get("data", {})
+    eq_source = st.session_state["market_equities"].get("source", "")
+    st.caption(f"Source: {eq_source}")
 
     # US Indices
     st.markdown("### US Indices")
-    us_col1, us_col2, us_col3, us_col4 = st.columns(4)
+    us = eq_data.get("us", {})
+    us_cols = st.columns(4)
 
-    with us_col1:
-        st.metric("S&P 500", "5,234.56", "+23.45 (+0.45%)")
-    with us_col2:
-        st.metric("Nasdaq", "16,432.12", "+156.78 (+0.96%)")
-    with us_col3:
-        st.metric("Dow Jones", "39,456.78", "+145.23 (+0.37%)")
-    with us_col4:
-        st.metric("Russell 2000", "2,045.67", "-12.34 (-0.60%)")
+    for i, (key, label) in enumerate([
+        ("spx", "S&P 500"), ("nasdaq", "NASDAQ"), ("dow", "Dow Jones"), ("russell2000", "Russell 2000"),
+    ]):
+        idx = us.get(key, {})
+        with us_cols[i]:
+            st.metric(
+                label,
+                _fmt_price(idx.get("current_price")),
+                _fmt_change(idx.get("change"), idx.get("change_percent")),
+            )
 
     st.markdown("---")
 
     # Global Indices
     st.markdown("### Global Indices")
-    global_col1, global_col2, global_col3, global_col4 = st.columns(4)
+    gl = eq_data.get("global", {})
+    global_indices = [
+        ("nikkei", "Nikkei 225"),
+        ("eurostoxx50", "Euro Stoxx 50"),
+        ("ftse100", "FTSE 100"),
+        ("dax", "DAX"),
+        ("hang_seng", "Hang Seng"),
+        ("shanghai", "SSE Composite"),
+        ("nifty50", "NIFTY 50"),
+    ]
 
-    with global_col1:
-        st.metric("Nikkei 225", "38,234.56", "+234.56 (+0.62%)")
-    with global_col2:
-        st.metric("Euro Stoxx 50", "4,987.23", "+12.34 (+0.25%)")
-    with global_col3:
-        st.metric("FTSE 100", "7,654.32", "-23.45 (-0.31%)")
-    with global_col4:
-        st.metric("Hang Seng", "17,234.56", "+145.67 (+0.85%)")
+    row1 = st.columns(4)
+    row2 = st.columns(4)
+    all_cols = row1 + row2
+
+    for i, (key, label) in enumerate(global_indices):
+        idx = gl.get(key, {})
+        with all_cols[i]:
+            st.metric(
+                label,
+                _fmt_price(idx.get("current_price")),
+                _fmt_change(idx.get("change"), idx.get("change_percent")),
+            )
 
     st.markdown("---")
 
     # Sector Performance
     st.markdown("### Sector Performance")
+    sectors = eq_data.get("sectors", {})
+    if sectors:
+        sector_names = [s.replace("_", " ").title() for s in sectors.keys()]
+        sector_values = list(sectors.values())
+        df_sectors = pd.DataFrame({"Sector": sector_names, "Performance (%)": sector_values})
 
-    sector_data = {
-        "Sector": ["Technology", "Healthcare", "Financials", "Energy", "Materials",
-                   "Industrials", "Consumer Disc.", "Consumer Staples", "Utilities", "Real Estate"],
-        "Performance": [1.2, 0.5, -0.3, 2.1, 0.8, 0.4, -0.2, 0.1, -0.5, -0.8],
-    }
-    df_sectors = pd.DataFrame(sector_data)
+        fig = px.bar(
+            df_sectors, x="Sector", y="Performance (%)",
+            color="Performance (%)",
+            color_continuous_scale=["#e74c3c", "#f39c12", "#27ae60"],
+            title="Sector Performance (%)",
+        )
+        fig.update_layout(height=400)
+        st.plotly_chart(fig, use_container_width=True)
 
-    fig = px.bar(
-        df_sectors,
-        x="Sector",
-        y="Performance",
-        color="Performance",
-        color_continuous_scale=["#e74c3c", "#f39c12", "#27ae60"],
-        title="Sector Performance (%)",
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    # VIX
+    vix = eq_data.get("vix", {})
+    if vix:
+        st.markdown("### Volatility")
+        vix_cols = st.columns(4)
+        with vix_cols[0]:
+            st.metric("VIX", _fmt_price(vix.get("current_price")),
+                       _fmt_change(vix.get("change"), vix.get("change_percent")),
+                       delta_color="inverse")
+        with vix_cols[1]:
+            st.metric("52W High", _fmt_price(vix.get("fifty_two_week_high")))
+        with vix_cols[2]:
+            st.metric("52W Low", _fmt_price(vix.get("fifty_two_week_low")))
 
-with tab2:
-    st.subheader("Fixed Income")
 
-    # Yield Curve
-    st.markdown("### US Treasury Yield Curve")
+# ── FX Tab ──────────────────────────────────────────────────
 
-    yield_data = {
-        "Tenor": ["1M", "3M", "6M", "1Y", "2Y", "5Y", "10Y", "30Y"],
-        "Yield": [5.35, 5.40, 5.30, 4.95, 4.65, 4.35, 4.25, 4.45],
-    }
-    df_yields = pd.DataFrame(yield_data)
-
-    fig_yield = px.line(
-        df_yields,
-        x="Tenor",
-        y="Yield",
-        markers=True,
-        title="Treasury Yield Curve",
-    )
-    fig_yield.update_traces(line=dict(color="#4a90d9", width=3))
-    st.plotly_chart(fig_yield, use_container_width=True)
-
-    # Key Rates
-    rate_col1, rate_col2, rate_col3, rate_col4 = st.columns(4)
-
-    with rate_col1:
-        st.metric("Fed Funds", "5.25-5.50%", "0.00%")
-    with rate_col2:
-        st.metric("2Y Treasury", "4.65%", "+0.02%")
-    with rate_col3:
-        st.metric("10Y Treasury", "4.25%", "+0.03%")
-    with rate_col4:
-        st.metric("2s10s Spread", "-40bps", "-2bps", delta_color="inverse")
-
-    st.markdown("---")
-
-    # Credit Spreads
-    st.markdown("### Credit Spreads")
-    credit_col1, credit_col2 = st.columns(2)
-
-    with credit_col1:
-        st.metric("Investment Grade", "98bps", "+2bps")
-    with credit_col2:
-        st.metric("High Yield", "345bps", "+5bps")
-
-with tab3:
-    st.subheader("Foreign Exchange")
+with tab_fx:
+    fx_data = st.session_state["market_fx"].get("data", {})
+    fx_source = st.session_state["market_fx"].get("source", "")
+    st.caption(f"Source: {fx_source}")
 
     # DXY
+    dxy = fx_data.get("dxy", {})
     st.markdown("### Dollar Index (DXY)")
-    st.metric("DXY", "104.25", "+0.15 (+0.14%)")
+    dxy_cols = st.columns(4)
+    with dxy_cols[0]:
+        st.metric("DXY", _fmt_price(dxy.get("value")),
+                   _fmt_change(dxy.get("change"), dxy.get("change_percent")))
+    with dxy_cols[1]:
+        st.metric("Day High", _fmt_price(dxy.get("day_high")))
+    with dxy_cols[2]:
+        st.metric("Day Low", _fmt_price(dxy.get("day_low")))
 
     st.markdown("---")
 
-    # Major Pairs
-    st.markdown("### Major Currency Pairs")
+    # Currency pairs
+    pairs = fx_data.get("pairs", {})
+    major_keys = ["eurusd", "usdjpy", "gbpusd", "usdchf", "audusd", "usdcad"]
+    em_keys = ["usdcnh", "usdmxn", "usdbrl"]
 
-    fx_col1, fx_col2, fx_col3 = st.columns(3)
-
-    with fx_col1:
-        st.metric("EUR/USD", "1.0856", "-0.0012 (-0.11%)")
-        st.metric("USD/JPY", "151.23", "+0.45 (+0.30%)")
-    with fx_col2:
-        st.metric("GBP/USD", "1.2678", "+0.0023 (+0.18%)")
-        st.metric("USD/CHF", "0.8912", "+0.0008 (+0.09%)")
-    with fx_col3:
-        st.metric("AUD/USD", "0.6545", "-0.0015 (-0.23%)")
-        st.metric("USD/CAD", "1.3678", "+0.0012 (+0.09%)")
+    st.markdown("### Major Pairs")
+    major_cols = st.columns(3)
+    for i, key in enumerate(major_keys):
+        pair = pairs.get(key, {})
+        with major_cols[i % 3]:
+            st.metric(
+                pair.get("pair", key.upper()),
+                _fmt_price(pair.get("rate"), decimals=4),
+                _fmt_change(pair.get("change"), pair.get("change_percent")),
+            )
 
     st.markdown("---")
 
-    # EM Currencies
     st.markdown("### Emerging Market Currencies")
-    em_col1, em_col2, em_col3 = st.columns(3)
+    em_cols = st.columns(3)
+    for i, key in enumerate(em_keys):
+        pair = pairs.get(key, {})
+        with em_cols[i]:
+            st.metric(
+                pair.get("pair", key.upper()),
+                _fmt_price(pair.get("rate"), decimals=4 if pair.get("rate", 0) < 10 else 2),
+                _fmt_change(pair.get("change"), pair.get("change_percent")),
+            )
 
-    with em_col1:
-        st.metric("USD/CNH", "7.2456", "+0.0123 (+0.17%)")
-    with em_col2:
-        st.metric("USD/MXN", "17.15", "-0.08 (-0.47%)")
-    with em_col3:
-        st.metric("USD/BRL", "5.02", "+0.03 (+0.60%)")
 
-with tab4:
-    st.subheader("Commodities")
+# ── Commodities Tab ─────────────────────────────────────────
+
+with tab_comm:
+    comm_data = st.session_state["market_commodities"].get("data", {})
+    comm_source = st.session_state["market_commodities"].get("source", "")
+    st.caption(f"Source: {comm_source}")
 
     # Precious Metals
     st.markdown("### Precious Metals")
-    pm_col1, pm_col2 = st.columns(2)
-
-    with pm_col1:
-        st.metric("Gold", "$2,345.67", "+$12.34 (+0.53%)")
-    with pm_col2:
-        st.metric("Silver", "$27.89", "+$0.45 (+1.64%)")
+    metals = comm_data.get("precious_metals", {})
+    metal_cols = st.columns(2)
+    for i, (key, label) in enumerate([("gold", "Gold"), ("silver", "Silver")]):
+        m = metals.get(key, {})
+        with metal_cols[i]:
+            st.metric(label, _fmt_price(m.get("price"), "$"),
+                       _fmt_change(m.get("change"), m.get("change_percent")))
 
     st.markdown("---")
 
     # Energy
     st.markdown("### Energy")
-    energy_col1, energy_col2, energy_col3 = st.columns(3)
-
-    with energy_col1:
-        st.metric("WTI Crude", "$78.45", "+$1.23 (+1.59%)")
-    with energy_col2:
-        st.metric("Brent Crude", "$82.34", "+$1.12 (+1.38%)")
-    with energy_col3:
-        st.metric("Natural Gas", "$2.45", "-$0.08 (-3.16%)")
+    energy = comm_data.get("energy", {})
+    energy_cols = st.columns(3)
+    for i, (key, label) in enumerate([
+        ("wti_crude", "WTI Crude"), ("brent_crude", "Brent Crude"), ("natural_gas", "Natural Gas"),
+    ]):
+        e = energy.get(key, {})
+        with energy_cols[i]:
+            st.metric(label, _fmt_price(e.get("price"), "$"),
+                       _fmt_change(e.get("change"), e.get("change_percent")))
 
     st.markdown("---")
 
     # Agriculture
     st.markdown("### Agriculture")
-    ag_col1, ag_col2, ag_col3 = st.columns(3)
+    ag = comm_data.get("agriculture", {})
+    ag_cols = st.columns(3)
+    for i, (key, label) in enumerate([("corn", "Corn"), ("wheat", "Wheat"), ("soybeans", "Soybeans")]):
+        a = ag.get(key, {})
+        with ag_cols[i]:
+            st.metric(label, _fmt_price(a.get("price"), "$"),
+                       _fmt_change(a.get("change"), a.get("change_percent")))
 
-    with ag_col1:
-        st.metric("Corn", "$4.56", "-$0.02 (-0.44%)")
-    with ag_col2:
-        st.metric("Wheat", "$5.78", "+$0.12 (+2.12%)")
-    with ag_col3:
-        st.metric("Soybeans", "$11.23", "+$0.08 (+0.72%)")
+    # Industrial
+    industrial = comm_data.get("industrial", {})
+    if industrial:
+        st.markdown("---")
+        st.markdown("### Industrial Metals")
+        ind_cols = st.columns(3)
+        for i, (key, m) in enumerate(industrial.items()):
+            with ind_cols[i % 3]:
+                st.metric(m.get("name", key), _fmt_price(m.get("price"), "$"),
+                           _fmt_change(m.get("change"), m.get("change_percent")))
 
-with tab5:
-    st.subheader("Cryptocurrency")
 
-    # Major Coins
+# ── Crypto Tab ──────────────────────────────────────────────
+
+with tab_crypto:
+    crypto_data = st.session_state["market_crypto"].get("data", {})
+    crypto_source = st.session_state["market_crypto"].get("source", "")
+    st.caption(f"Source: {crypto_source}")
+
+    # Coins
     st.markdown("### Major Cryptocurrencies")
+    assets = crypto_data.get("assets", {})
 
-    crypto_col1, crypto_col2, crypto_col3 = st.columns(3)
-
-    with crypto_col1:
-        st.metric("Bitcoin", "$67,432", "+$1,234 (+1.86%)")
-        st.metric("Solana", "$145.67", "+$5.23 (+3.72%)")
-    with crypto_col2:
-        st.metric("Ethereum", "$3,456", "+$78 (+2.31%)")
-        st.metric("XRP", "$0.52", "+$0.02 (+4.00%)")
-    with crypto_col3:
-        st.metric("BNB", "$567.89", "+$12.34 (+2.22%)")
-        st.metric("Cardano", "$0.45", "+$0.01 (+2.27%)")
+    crypto_cols = st.columns(3)
+    for i, (key, coin) in enumerate(assets.items()):
+        with crypto_cols[i % 3]:
+            price = coin.get("current_price", 0)
+            prefix = "$"
+            decimals = 2 if price >= 1 else 4
+            st.metric(
+                f"{coin.get('name', key)} ({coin.get('symbol', '')})",
+                _fmt_price(price, prefix, decimals),
+                f"{coin.get('price_change_percentage_24h', 0):+.2f}% (24h)",
+            )
 
     st.markdown("---")
 
     # Market Overview
     st.markdown("### Market Overview")
-    market_col1, market_col2, market_col3, market_col4 = st.columns(4)
-
-    with market_col1:
-        st.metric("Total Market Cap", "$2.45T", "+$45B (+1.87%)")
-    with market_col2:
-        st.metric("BTC Dominance", "52.3%", "+0.5%")
-    with market_col3:
-        st.metric("Fear & Greed", "65", "Greed")
-    with market_col4:
-        st.metric("24h Volume", "$78.5B", "+$5.2B")
+    overview = crypto_data.get("market_overview", {})
+    if overview:
+        ov_cols = st.columns(4)
+        with ov_cols[0]:
+            mcap = overview.get("total_market_cap", 0)
+            st.metric("Total Market Cap", f"${mcap / 1e12:.2f}T")
+        with ov_cols[1]:
+            st.metric("BTC Dominance", f"{overview.get('btc_dominance', 0):.1f}%")
+        with ov_cols[2]:
+            vol = overview.get("total_volume", 0)
+            st.metric("24h Volume", f"${vol / 1e9:.1f}B")
+        with ov_cols[3]:
+            st.metric("24h Change", f"{overview.get('market_cap_change_24h', 0):+.2f}%")
 
     st.markdown("---")
 
-    # Fear & Greed Gauge
+    # Fear & Greed
     st.markdown("### Market Sentiment")
+    fg = crypto_data.get("fear_greed", {})
+    if fg:
+        fg_value = fg.get("value", 50)
+        fg_label = fg.get("classification", "Neutral")
 
-    fig_gauge = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=65,
-        domain={"x": [0, 1], "y": [0, 1]},
-        title={"text": "Crypto Fear & Greed Index"},
-        gauge={
-            "axis": {"range": [None, 100]},
-            "bar": {"color": "#f39c12"},
-            "steps": [
-                {"range": [0, 25], "color": "#e74c3c"},
-                {"range": [25, 45], "color": "#f39c12"},
-                {"range": [45, 55], "color": "#95a5a6"},
-                {"range": [55, 75], "color": "#27ae60"},
-                {"range": [75, 100], "color": "#2ecc71"},
-            ],
-            "threshold": {
-                "line": {"color": "black", "width": 4},
-                "thickness": 0.75,
-                "value": 65,
+        fig_gauge = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=fg_value,
+            domain={"x": [0, 1], "y": [0, 1]},
+            title={"text": f"Crypto Fear & Greed Index — {fg_label}"},
+            gauge={
+                "axis": {"range": [0, 100]},
+                "bar": {"color": "#f39c12"},
+                "steps": [
+                    {"range": [0, 25], "color": "#e74c3c"},
+                    {"range": [25, 45], "color": "#f39c12"},
+                    {"range": [45, 55], "color": "#95a5a6"},
+                    {"range": [55, 75], "color": "#27ae60"},
+                    {"range": [75, 100], "color": "#2ecc71"},
+                ],
+                "threshold": {
+                    "line": {"color": "black", "width": 4},
+                    "thickness": 0.75,
+                    "value": fg_value,
+                },
             },
-        },
-    ))
+        ))
+        fig_gauge.update_layout(height=350)
+        st.plotly_chart(fig_gauge, use_container_width=True)
 
-    st.plotly_chart(fig_gauge, use_container_width=True)
+# ── Navigation ──────────────────────────────────────────────
 
-# Refresh button
-st.sidebar.markdown("---")
-if st.sidebar.button("🔄 Refresh Data", use_container_width=True):
-    st.rerun()
-
-st.sidebar.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+st.markdown("---")
+nav_cols = st.columns([1, 1])
+with nav_cols[1]:
+    if st.button("Continue to Step 2: Research Sources >>", use_container_width=True, type="primary"):
+        st.switch_page("pages/2_Research_Sources.py")

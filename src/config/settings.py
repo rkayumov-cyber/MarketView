@@ -19,8 +19,12 @@ class Settings(BaseSettings):
 
     # Application
     app_env: Literal["development", "staging", "production"] = "development"
-    debug: bool = True
+    debug: bool = False
     log_level: str = "INFO"
+
+    # Security
+    api_key: SecretStr | None = None  # Set to require X-API-Key header on all endpoints
+    cors_origins: list[str] = ["http://localhost:8501", "http://localhost:5173"]
 
     # API Keys
     fred_api_key: SecretStr | None = None

@@ -55,42 +55,38 @@ class TechnicalsSectionBuilder:
         )
 
     async def _get_key_levels(self) -> list[TechnicalLevel]:
-        """Get technical levels for key assets."""
-        levels = []
+        """Get technical levels for key assets (fetched in parallel)."""
 
-        for name, symbol in self.KEY_ASSETS.items():
+        async def _fetch_one(name: str, symbol: str) -> TechnicalLevel | None:
             try:
-                # Fetch historical data
                 ticker = yf.Ticker(symbol)
                 data = await asyncio.to_thread(
                     ticker.history, period="1y", interval="1d"
                 )
-
                 if data.empty or len(data) < 200:
-                    continue
-
-                # Run technical analysis
+                    return None
                 analysis = self.analyzer.analyze(name, data)
+                if not analysis:
+                    return None
+                return TechnicalLevel(
+                    asset=name,
+                    current_price=analysis.current_price,
+                    support_1=analysis.support_resistance.support_1,
+                    support_2=analysis.support_resistance.support_2,
+                    resistance_1=analysis.support_resistance.resistance_1,
+                    resistance_2=analysis.support_resistance.resistance_2,
+                    pivot=analysis.support_resistance.pivot,
+                    trend=analysis.overall_signal,
+                    rsi=analysis.momentum.rsi,
+                    signal=analysis.overall_signal,
+                )
+            except Exception:
+                return None
 
-                if analysis:
-                    levels.append(TechnicalLevel(
-                        asset=name,
-                        current_price=analysis.current_price,
-                        support_1=analysis.support_resistance.support_1,
-                        support_2=analysis.support_resistance.support_2,
-                        resistance_1=analysis.support_resistance.resistance_1,
-                        resistance_2=analysis.support_resistance.resistance_2,
-                        pivot=analysis.support_resistance.pivot,
-                        trend=analysis.overall_signal,
-                        rsi=analysis.momentum.rsi,
-                        signal=analysis.overall_signal,
-                    ))
-
-            except Exception as e:
-                print(f"Error analyzing {name}: {e}")
-                continue
-
-        return levels
+        results = await asyncio.gather(
+            *(_fetch_one(name, sym) for name, sym in self.KEY_ASSETS.items())
+        )
+        return [r for r in results if r is not None]
 
     async def _get_volatility_analysis(self) -> VolatilityAnalysis:
         """Get volatility analysis."""
