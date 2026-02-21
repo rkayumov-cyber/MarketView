@@ -289,6 +289,15 @@ class ResearchInsightsSection(BaseModel):
     total_chunks_searched: int
 
 
+class PositioningSummaryItem(BaseModel):
+    """Single row in the positioning summary table."""
+
+    asset_class: str
+    bias: str  # "Overweight", "Neutral", "Underweight"
+    conviction: str  # "High", "Medium", "Low"
+    rationale: str
+
+
 class Report(BaseModel):
     """Complete market analysis report."""
 
@@ -299,6 +308,8 @@ class Report(BaseModel):
     config: ReportConfig
 
     executive_summary: str = ""
+    thesis: str = ""
+    positioning_summary: list[PositioningSummaryItem] = Field(default_factory=list)
 
     pulse: PulseSection
     sentiment: SentimentSection | None = None

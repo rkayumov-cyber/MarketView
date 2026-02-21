@@ -30,6 +30,8 @@ class MarkdownFormatter:
         sections = [
             self._format_header(report),
             self._format_executive_summary(report),
+            self._format_thesis(report),
+            self._format_positioning_summary(report),
             self._format_pulse(report, num()),
         ]
 
@@ -66,6 +68,33 @@ class MarkdownFormatter:
             return ""
         # Wrap each sentence-line as a blockquote
         lines = [f"> {line}" for line in report.executive_summary.split("\n") if line.strip()]
+        return "\n".join(lines)
+
+    def _format_thesis(self, report: Report) -> str:
+        """Format the investment thesis — the connective narrative."""
+        if not report.thesis:
+            return ""
+        lines = [
+            "## Investment Thesis",
+            "",
+            report.thesis,
+        ]
+        return "\n".join(lines)
+
+    def _format_positioning_summary(self, report: Report) -> str:
+        """Format the positioning summary table."""
+        if not report.positioning_summary:
+            return ""
+        lines = [
+            "## Positioning Summary",
+            "",
+            "| Asset Class | Bias | Conviction | Rationale |",
+            "|-------------|------|------------|-----------|",
+        ]
+        for item in report.positioning_summary:
+            lines.append(
+                f"| {item.asset_class} | {item.bias} | {item.conviction} | {item.rationale} |"
+            )
         return "\n".join(lines)
 
     def _format_pulse(self, report: Report, num: str) -> str:

@@ -406,72 +406,160 @@ class MacroAnalyzer:
 
         return overall, risks, opportunities
 
-    async def analyze_eu(self) -> RegionalAnalysis:
-        """Analyze EU macro conditions.
+    async def analyze_eu(self, us: RegionalAnalysis | None = None) -> RegionalAnalysis:
+        """Analyze EU macro conditions based on US data and regime inference.
 
-        Note: Full implementation would require ECB data sources.
-        This is a simplified version.
+        Uses US macro conditions as a proxy since no direct ECB data source is
+        available.  When US inflation is elevated, EU likely faces similar pressures
+        from global commodity prices.  When US growth decelerates, EU — with its
+        larger trade exposure — is typically hit harder.
         """
+        # Derive EU picture from US data when available
+        if us and us.inflation:
+            us_inf = us.inflation.to_dict()
+            cpi = us_inf.get("headline_cpi")
+            trend = us_inf.get("trend", "stable")
+        else:
+            cpi = None
+            trend = "unknown"
+
+        if us and us.monetary_policy:
+            us_policy = us.monetary_policy.to_dict()
+            us_stance = us_policy.get("policy_stance", "neutral")
+        else:
+            us_stance = "neutral"
+
+        # Construct assessment dynamically
+        if cpi is not None and cpi > 3:
+            inf_msg = f"European inflation likely elevated alongside US ({cpi:.1f}% CPI), driven by global energy and food prices"
+            ecb_msg = "ECB likely maintaining restrictive stance, though fragmentation risk limits aggressive tightening"
+        elif cpi is not None and cpi < 2:
+            inf_msg = "Disinflationary pressures may be even stronger in Europe given weaker domestic demand"
+            ecb_msg = "ECB has scope for easing ahead of the Fed, creating potential policy divergence"
+        else:
+            inf_msg = "European inflation trajectory broadly tracking US disinflation path with a lag"
+            ecb_msg = "ECB balancing price stability with growth concerns — data-dependent stance"
+
+        if us and us.growth:
+            us_growth = us.growth.to_dict()
+            gdp = us_growth.get("gdp_growth")
+            if gdp is not None and gdp < 1:
+                growth_msg = f"With US growth at {gdp:.1f}%, Europe's export-oriented economy faces significant headwinds"
+            elif gdp is not None and gdp > 2:
+                growth_msg = f"US strength ({gdp:.1f}%) provides a tailwind for European exporters, though domestic demand remains subdued"
+            else:
+                growth_msg = "European growth outlook mixed — manufacturing weakness offset by services resilience"
+        else:
+            growth_msg = "European growth remains structurally below US, with manufacturing sector under pressure"
+
+        overall = f"{inf_msg}. {growth_msg}. {ecb_msg}."
+
+        # Dynamic risks based on US conditions
+        risks = []
+        opportunities = []
+
+        if us_stance == "hawkish":
+            risks.append("ECB forced to follow Fed tightening, amplifying growth headwinds in periphery")
+            risks.append("Sovereign spread widening in Italy/Greece if rates stay higher for longer")
+        else:
+            opportunities.append("ECB easing cycle could support European equities — relative value vs expensive US")
+
+        risks.append("Energy security and industrial competitiveness remain structural challenges")
+        risks.append("Geopolitical spillovers from Eastern Europe and trade policy uncertainty")
+
+        if trend == "falling":
+            opportunities.append("Disinflation opens door for ECB rate cuts, supporting duration-sensitive sectors")
+        opportunities.append("Green transition capex cycle provides multi-year investment theme")
+        opportunities.append("EUR undervaluation relative to PPP creates currency tailwind for EUR-denominated assets")
+
         return RegionalAnalysis(
             region="EU",
             inflation=None,
             growth=None,
             labor=None,
             monetary_policy=None,
-            overall_assessment=(
-                "European economy facing energy transition challenges and "
-                "fragmentation risks. ECB balancing inflation fight with growth concerns."
-            ),
-            key_risks=[
-                "Energy security and industrial competitiveness",
-                "Sovereign debt sustainability in periphery",
-                "Geopolitical tensions (Ukraine, trade)",
-            ],
-            key_opportunities=[
-                "Green transition investment",
-                "Fiscal stimulus potential",
-                "Relative value vs US assets",
-            ],
+            overall_assessment=overall,
+            key_risks=risks,
+            key_opportunities=opportunities,
         )
 
-    async def analyze_asia(self) -> RegionalAnalysis:
-        """Analyze Asia macro conditions.
+    async def analyze_asia(self, us: RegionalAnalysis | None = None) -> RegionalAnalysis:
+        """Analyze Asia macro conditions derived from US data and global context.
 
-        Note: Full implementation would require BoJ, PBoC data sources.
-        This is a simplified version.
+        Japan policy normalisation, China stimulus trajectory, and EM Asia growth
+        are all influenced by US rate cycle and dollar dynamics.
         """
+        if us and us.monetary_policy:
+            us_policy = us.monetary_policy.to_dict()
+            ff = us_policy.get("fed_funds")
+            us_stance = us_policy.get("policy_stance", "neutral")
+        else:
+            ff = None
+            us_stance = "neutral"
+
+        if us and us.growth:
+            us_gdp = us.growth.to_dict().get("gdp_growth")
+        else:
+            us_gdp = None
+
+        # Japan narrative
+        if ff is not None and ff > 4:
+            japan_msg = "BoJ normalization constrained by wide US-Japan rate differential — USD/JPY intervention risk elevated"
+        elif ff is not None and ff < 3:
+            japan_msg = "Narrowing US-Japan rate gap supports yen; BoJ has room to continue gradual normalization"
+        else:
+            japan_msg = "BoJ treading carefully — balancing domestic reflation against global rate dynamics"
+
+        # China narrative
+        if us_gdp is not None and us_gdp < 1.5:
+            china_msg = "Weakening global demand pressures China's export engine, increasing urgency for domestic stimulus"
+        elif us_gdp is not None and us_gdp > 2.5:
+            china_msg = "Resilient US demand provides a floor for China trade, but property sector remains the binding constraint"
+        else:
+            china_msg = "China navigating between stimulus-driven stabilization and structural property sector deleveraging"
+
+        # EM Asia
+        if us_stance == "hawkish":
+            em_msg = "Hawkish Fed pressures EM Asian currencies and limits policy easing scope"
+        elif us_stance == "dovish":
+            em_msg = "Dovish Fed creates room for EM Asian central banks to ease, supporting growth"
+        else:
+            em_msg = "EM Asia benefits from supply chain diversification and improving terms of trade"
+
+        overall = f"{japan_msg}. {china_msg}. {em_msg}."
+
+        risks = []
+        opportunities = []
+
+        if us_stance == "hawkish":
+            risks.append("Strong USD pressures EM Asian currencies and tightens financial conditions")
+        risks.append("China property sector stress could trigger disorderly deleveraging")
+        risks.append("BoJ policy normalization may drain global liquidity if JGB yields spike")
+        risks.append("Geopolitical tensions in Taiwan Strait remain underpriced tail risk")
+
+        if us_stance in ("dovish", "neutral"):
+            opportunities.append("Fed pivot supports EM Asian assets — rates and equities")
+        opportunities.append("India and ASEAN capturing manufacturing share from China — secular growth theme")
+        opportunities.append("Japan corporate governance reforms driving shareholder returns")
+
         return RegionalAnalysis(
             region="Asia",
             inflation=None,
             growth=None,
             labor=None,
             monetary_policy=None,
-            overall_assessment=(
-                "Asian economies showing divergence. China stimulus efforts ongoing, "
-                "Japan normalizing policy, EM Asia benefiting from supply chain shifts."
-            ),
-            key_risks=[
-                "China property sector stress",
-                "BoJ policy normalization impact on global rates",
-                "Trade tensions and supply chain shifts",
-            ],
-            key_opportunities=[
-                "China stimulus beneficiaries",
-                "India growth story",
-                "ASEAN manufacturing shift",
-            ],
+            overall_assessment=overall,
+            key_risks=risks,
+            key_opportunities=opportunities,
         )
 
     async def full_analysis(self) -> MacroAnalysis:
         """Perform complete macro analysis across all regions."""
         us = await self.analyze_us()
-        eu = await self.analyze_eu()
-        asia = await self.analyze_asia()
+        eu = await self.analyze_eu(us)
+        asia = await self.analyze_asia(us)
 
-        # Generate global outlook
         global_outlook = self._generate_global_outlook(us, eu, asia)
-
-        # Identify cross-regional themes
         themes = self._identify_cross_regional_themes(us, eu, asia)
 
         return MacroAnalysis(
@@ -488,12 +576,42 @@ class MacroAnalyzer:
         eu: RegionalAnalysis,
         asia: RegionalAnalysis,
     ) -> str:
-        """Generate global macro outlook."""
-        return (
-            "Global economy navigating synchronized policy tightening cycle. "
-            "US remains relative outperformer. Europe facing structural headwinds. "
-            "Asia showing divergence with China stimulus vs Japan normalization."
-        )
+        """Generate global macro outlook from actual regional data."""
+        parts = []
+
+        # US leadership assessment
+        if us.growth and us.growth.gdp_growth is not None:
+            gdp = us.growth.gdp_growth
+            if gdp > 2:
+                parts.append(f"US economy leading global growth at {gdp:.1f}%, providing a floor for risk assets")
+            elif gdp > 0:
+                parts.append(f"US growth moderating to {gdp:.1f}%, losing its role as the global growth engine")
+            else:
+                parts.append(f"US contraction ({gdp:.1f}%) signals potential global synchronized downturn")
+
+        # Policy stance
+        if us.monetary_policy:
+            stance = us.monetary_policy.policy_stance
+            if stance == "hawkish":
+                parts.append("Restrictive Fed policy continues to tighten global financial conditions via the dollar channel")
+            elif stance == "dovish":
+                parts.append("Fed easing cycle loosens global conditions, providing relief to dollar-sensitive economies")
+            else:
+                parts.append("Fed on hold — global policy divergence widening as ECB and BoJ chart separate paths")
+
+        # Inflation
+        if us.inflation and us.inflation.core_pce is not None:
+            pce = us.inflation.core_pce
+            trend = us.inflation.trend
+            if pce > 3:
+                parts.append(f"Persistent inflation ({pce:.1f}% core PCE, trend: {trend}) constrains policy flexibility globally")
+            elif pce < 2.5 and trend == "falling":
+                parts.append(f"Disinflation progress ({pce:.1f}% core PCE, trend: {trend}) creates room for synchronized easing")
+
+        if not parts:
+            parts.append("Global economy navigating uncertainty — mixed signals across growth, inflation, and policy")
+
+        return ". ".join(parts) + "."
 
     def _identify_cross_regional_themes(
         self,
@@ -501,11 +619,34 @@ class MacroAnalyzer:
         eu: RegionalAnalysis,
         asia: RegionalAnalysis,
     ) -> list[str]:
-        """Identify themes affecting multiple regions."""
-        return [
-            "Central bank policy divergence",
-            "Geopolitical fragmentation and supply chain reshoring",
-            "Energy transition and green infrastructure",
-            "AI/Technology productivity gains",
-            "Fiscal sustainability concerns",
-        ]
+        """Identify themes from actual regional analysis data."""
+        themes = []
+
+        # Policy divergence/convergence
+        if us.monetary_policy:
+            stance = us.monetary_policy.policy_stance
+            if stance == "hawkish":
+                themes.append("Central bank divergence — Fed hawkish while others face growth constraints")
+            elif stance == "dovish":
+                themes.append("Synchronized easing cycle — global liquidity conditions improving")
+            else:
+                themes.append("Central bank pause — markets transitioning from rate regime to data-dependent trading")
+
+        # Inflation regime
+        if us.inflation and us.inflation.trend == "falling":
+            themes.append("Global disinflation — supply chain normalization and base effects driving price deceleration")
+        elif us.inflation and us.inflation.trend == "rising":
+            themes.append("Inflation re-acceleration risk — commodity prices and wage stickiness challenging central bank credibility")
+
+        # Growth
+        if us.growth and us.growth.gdp_growth is not None:
+            if us.growth.gdp_growth < 1:
+                themes.append("Global growth scare — leading indicators deteriorating across regions")
+            elif us.growth.gdp_growth > 2.5:
+                themes.append("Resilient growth despite tight policy — soft landing narrative gaining traction")
+
+        # Always-relevant structural themes
+        themes.append("AI and technology capex cycle reshaping productivity assumptions and sector leadership")
+        themes.append("Geopolitical fragmentation driving supply chain reshoring and defense spending")
+
+        return themes[:5]

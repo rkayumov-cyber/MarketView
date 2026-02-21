@@ -5,7 +5,9 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
+from src.config.constants import MarketRegime
 from src.reports.models import (
+    PositioningSummaryItem,
     Report,
     ReportConfig,
     ReportLevel,
@@ -223,11 +225,19 @@ class ReportBuilder:
         if config.include_research:
             metadata["include_research"] = True
 
+        # Generate thesis — connects regime → macro → assets → positioning
+        thesis = self._generate_thesis(pulse, macro, assets, sentiment)
+
+        # Generate positioning summary
+        positioning_summary = self._generate_positioning_summary(pulse, macro, assets)
+
         return Report(
             report_id=report_id,
             title=title,
             level=level,
             executive_summary=executive_summary,
+            thesis=thesis,
+            positioning_summary=positioning_summary,
             config=config,
             pulse=pulse,
             sentiment=sentiment,
@@ -240,23 +250,188 @@ class ReportBuilder:
         )
 
     def _generate_executive_summary(self, pulse, macro, assets) -> str:
-        """Generate a rule-based executive summary from key sections."""
-        regime = pulse.regime.regime.replace("_", " ").title()
-        regime_desc = pulse.regime.description
+        """Generate an analytical executive summary — not just data, but meaning."""
+        regime = pulse.regime.regime.replace("_", " ")
+        confidence = pulse.regime.confidence
 
+        # Lead with the regime and confidence
+        if confidence > 0.6:
+            conviction = "with high conviction"
+        elif confidence > 0.4:
+            conviction = "with moderate conviction"
+        else:
+            conviction = "though signals are mixed"
+
+        parts = [f"Markets are in a **{regime}** regime {conviction} ({confidence:.0%})."]
+
+        # Add the most meaningful asset move with context
         top_move = self._get_top_asset_move(assets)
-        macro_outlook = macro.global_outlook
-
-        # 2-3 sentence summary combining regime + top move + macro
-        parts = [f"Markets are in a {regime.lower()} regime. {regime_desc}"]
         if top_move:
             parts.append(top_move)
-        # Add a short macro sentence (first sentence of outlook)
-        first_sentence = macro_outlook.split(". ")[0].rstrip(".")
-        if first_sentence:
-            parts.append(f"{first_sentence}.")
+
+        # Macro connection
+        if macro.us and macro.us.headline:
+            first = macro.us.headline.split(".")[0].rstrip(".")
+            parts.append(f"{first}.")
+
+        # Sentiment overlay if available
+        if pulse.sentiment:
+            if pulse.divergences:
+                parts.append(
+                    f"Notable divergence: {pulse.divergences[0].description.lower()}."
+                )
+            else:
+                bull = pulse.sentiment.bullish_ratio
+                if bull > 0.65:
+                    parts.append("Retail sentiment skews heavily bullish — watch for positioning crowding.")
+                elif bull < 0.35:
+                    parts.append("Retail sentiment is bearish — contrarian buyers may find opportunity.")
 
         return " ".join(parts)
+
+    def _generate_thesis(self, pulse, macro, assets, sentiment) -> str:
+        """Generate a connecting thesis: regime → macro → assets → what to do."""
+        regime = pulse.regime.regime.replace("_", " ")
+        regime_enum = MarketRegime(pulse.regime.regime)
+
+        # Import implications
+        from src.analysis import RegimeDetector
+        impl = RegimeDetector().get_regime_implications(regime_enum)
+
+        parts = []
+
+        # 1. Regime + macro linkage
+        eq_bias = impl.get("equities", {}).get("bias", "neutral")
+        fi_bias = impl.get("fixed_income", {}).get("bias", "neutral")
+        comm_bias = impl.get("commodities", {}).get("bias", "neutral")
+
+        parts.append(
+            f"The dominant theme is **{regime}**. "
+            f"This regime historically favors {eq_bias} equity positioning, "
+            f"{fi_bias} fixed income, and {comm_bias} commodities."
+        )
+
+        # 2. Macro confirmation or contradiction
+        if macro.us and macro.us.inflation:
+            inf = macro.us.inflation
+            if isinstance(inf, dict):
+                inf_trend = inf.get("trend", "stable")
+            else:
+                inf_trend = inf.trend if hasattr(inf, "trend") else "stable"
+
+            if regime_enum in (MarketRegime.GOLDILOCKS, MarketRegime.RISK_ON) and inf_trend == "rising":
+                parts.append(
+                    "However, rising inflation poses a risk to regime persistence — "
+                    "monitor closely for regime transition signals."
+                )
+            elif regime_enum == MarketRegime.STAGFLATION and inf_trend == "falling":
+                parts.append(
+                    "Encouraging sign: inflation trend is turning lower, which could "
+                    "catalyze a regime shift toward goldilocks if growth stabilizes."
+                )
+            else:
+                parts.append(f"Macro data confirms the regime — inflation trend is {inf_trend}.")
+
+        # 3. Asset class alignment check
+        if assets.equities and assets.equities.vix:
+            vix_level = assets.equities.vix.get("current_price", 0)
+            if regime_enum == MarketRegime.GOLDILOCKS and vix_level > 20:
+                parts.append(
+                    f"VIX at {vix_level:.1f} is inconsistent with goldilocks — "
+                    "this disconnect often resolves with either a vol mean-reversion or regime shift."
+                )
+            elif regime_enum == MarketRegime.RISK_OFF and vix_level < 20:
+                parts.append(
+                    f"VIX at {vix_level:.1f} appears low for a risk-off environment — "
+                    "either stress is contained or markets are underpricing tail risk."
+                )
+
+        # 4. Actionable conclusion
+        sectors = impl.get("equities", {}).get("sectors", [])
+        if sectors:
+            sector_list = ", ".join(s.replace("_", " ") for s in sectors[:3])
+            parts.append(f"Favored sectors: {sector_list}.")
+
+        return " ".join(parts)
+
+    def _generate_positioning_summary(self, pulse, macro, assets) -> list[PositioningSummaryItem]:
+        """Generate a positioning summary table based on regime implications."""
+        regime_enum = MarketRegime(pulse.regime.regime)
+        from src.analysis import RegimeDetector
+        impl = RegimeDetector().get_regime_implications(regime_enum)
+        confidence = pulse.regime.confidence
+
+        # Map bias strings to positioning labels
+        bias_map = {
+            "bullish": "Overweight",
+            "bearish": "Underweight",
+            "cautious": "Underweight",
+            "neutral": "Neutral",
+            "mixed": "Neutral",
+        }
+
+        conviction = "High" if confidence > 0.6 else ("Medium" if confidence > 0.4 else "Low")
+
+        items = []
+
+        # Equities
+        eq_impl = impl.get("equities", {})
+        eq_bias = eq_impl.get("bias", "neutral")
+        eq_sectors = eq_impl.get("sectors", [])
+        items.append(PositioningSummaryItem(
+            asset_class="Equities",
+            bias=bias_map.get(eq_bias, "Neutral"),
+            conviction=conviction,
+            rationale=f"{regime_enum.value.replace('_', ' ').title()} regime favors "
+                      f"{', '.join(s.replace('_', ' ') for s in eq_sectors[:2]) if eq_sectors else 'balanced allocation'}",
+        ))
+
+        # Fixed Income
+        fi_impl = impl.get("fixed_income", {})
+        fi_bias = fi_impl.get("bias", "neutral")
+        duration = fi_impl.get("duration", "moderate")
+        items.append(PositioningSummaryItem(
+            asset_class="Fixed Income",
+            bias=bias_map.get(fi_bias, "Neutral"),
+            conviction=conviction,
+            rationale=f"Duration: {duration}. "
+                      + ("Quality over credit." if fi_bias == "bullish" else "Favor carry where spreads compensate."),
+        ))
+
+        # Commodities
+        comm_impl = impl.get("commodities", {})
+        comm_bias = comm_impl.get("bias", "neutral")
+        focus = comm_impl.get("focus", [])
+        items.append(PositioningSummaryItem(
+            asset_class="Commodities",
+            bias=bias_map.get(comm_bias, "Neutral"),
+            conviction="Medium",
+            rationale=f"Focus on {', '.join(focus)}" if focus else "Broad commodity exposure appropriate",
+        ))
+
+        # Crypto
+        crypto_impl = impl.get("crypto", {})
+        crypto_bias = crypto_impl.get("bias", "neutral")
+        items.append(PositioningSummaryItem(
+            asset_class="Crypto",
+            bias=bias_map.get(crypto_bias, "Neutral"),
+            conviction="Low",
+            rationale="High-beta play on risk sentiment — position size accordingly",
+        ))
+
+        # FX
+        fx_impl = impl.get("fx", {})
+        fx_bias = fx_impl.get("bias", "neutral")
+        fx_label = {"usd_bullish": "Overweight USD", "safe_haven": "Overweight USD/JPY/CHF",
+                     "risk_currencies": "Overweight AUD/NZD/EM", "neutral": "Neutral"}.get(fx_bias, "Neutral")
+        items.append(PositioningSummaryItem(
+            asset_class="FX",
+            bias=fx_label,
+            conviction=conviction,
+            rationale=f"Dollar dynamics driven by {regime_enum.value.replace('_', ' ')} regime and Fed path",
+        ))
+
+        return items
 
     @staticmethod
     def _get_top_asset_move(assets) -> str:
@@ -267,7 +442,7 @@ class ReportBuilder:
                     change = data["change_percent"]
                     price = data.get("current_price", 0)
                     return (
-                        f"{name.upper()} is at {price:,.0f} "
+                        f"{name.upper()} at {price:,.0f} "
                         f"({change:+.2f}% on the day)."
                     )
         return ""
